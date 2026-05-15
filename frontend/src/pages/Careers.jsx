@@ -13,6 +13,7 @@ export default function Careers() {
   const [busy, setBusy] = useState(false);
 
   const load = () => http.get("/jobs", { params: { q: q || undefined, location: location || undefined } }).then((r) => setJobs(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); http.get("/settings/job_categories").then((r) => setCats(r.data)); }, []);
 
   const create = async () => {

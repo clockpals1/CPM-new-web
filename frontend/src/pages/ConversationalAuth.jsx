@@ -47,6 +47,7 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
     if (current?.type === "parish") {
       http.get(`/parishes/nearby`, { params: { country: data.country, city: data.city } }).then((r) => setParishes(r.data)).catch(() => {});
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, mode]);
 
   const next = () => { setErr(""); setStep((s) => Math.min(s + 1, steps.length - 1)); };

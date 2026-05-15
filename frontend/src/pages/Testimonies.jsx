@@ -20,6 +20,7 @@ export default function Testimonies() {
   useEffect(() => {
     http.get("/me/memberships").then((r) => { setMemberships(r.data); if (r.data[0]) setParishId(r.data[0].parish_id); });
   }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [scope, parishId]);
 
   const submit = async () => {

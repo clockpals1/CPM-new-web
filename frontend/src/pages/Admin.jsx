@@ -18,6 +18,7 @@ function SettingsManager() {
   const [items, setItems] = useState([]);
   const [newLabel, setNewLabel] = useState("");
   const load = () => http.get(`/settings/${activeKey}`).then((r) => setItems(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [activeKey]);
   const add = async () => {
     if (!newLabel.trim()) return;

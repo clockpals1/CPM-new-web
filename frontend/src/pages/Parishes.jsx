@@ -10,6 +10,7 @@ export default function Parishes() {
   const [city, setCity] = useState("");
 
   const load = () => http.get("/parishes", { params: { q: q || undefined, country: country || undefined, city: city || undefined } }).then((r) => setItems(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
   return (

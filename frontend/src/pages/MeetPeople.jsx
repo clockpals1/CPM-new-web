@@ -14,6 +14,7 @@ export default function MeetPeople() {
   const [busy, setBusy] = useState(false);
 
   const load = () => http.get("/members", { params: { country: country || undefined, q: q || undefined } }).then((r) => setMembers(r.data.filter((m) => m.id !== user?.id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [country]);
 
   const follow = async (id) => { try { await http.post(`/members/${id}/follow`); toast.success("Following"); } catch (e) { toast.error(formatErr(e)); } };

@@ -19,6 +19,7 @@ export default function Messages() {
     if (!active && r.data[0]) setActive(r.data[0].conversation_id);
   }).catch(() => {});
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
   // Connect WS
@@ -47,6 +48,7 @@ export default function Messages() {
       ws.onerror = () => { /* silent */ };
     }).catch(() => {});
     return () => { try { wsRef.current && wsRef.current.close(); } catch {} };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   useEffect(() => {
