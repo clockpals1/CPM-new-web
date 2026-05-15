@@ -48,6 +48,7 @@ function AdminGate({ children }) {
 }
 
 function App() {
+  useEffect(() => { ensureServiceWorker(); }, []);
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -55,6 +56,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<ConversationalAuth />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/app"
             element={

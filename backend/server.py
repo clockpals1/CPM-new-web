@@ -12,12 +12,15 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import uuid
 import logging
+import secrets
+import base64 as b64lib
+import json as jsonlib
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Set
 
 import bcrypt
 import jwt
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
@@ -351,6 +354,7 @@ async def refresh_token(request: Request, response: Response):
 SETTING_KEYS = {
     "ccc_ranks", "badges", "event_categories", "service_types",
     "prayer_categories", "job_categories", "report_reasons",
+    "integration_config", "livestream_providers",
 }
 
 
@@ -1074,6 +1078,390 @@ async def home_stats():
     }
 
 
+# ====================================================
+# INTEGRATIONS — admin-configurable via /api/integrations
+# ====================================================
+async def get_config(label: str) -> Optional[str]:
+    doc = await db.admin_settings.find_one({"key": "integration_config", "label": label, "active": True})
+    if not doc:
+        return None
+    return (doc.get("meta") or {}).get("value")
+
+
+async def set_config(label: str, value: str, description: str = ""):
+    existing = await db.admin_settings.find_one({"key": "integration_config", "label": label})
+    if existing:
+        await db.admin_settings.update_one({"id": existing["id"]}, {"$set": {"meta": {"value": value}, "description": description, "active": True}})
+    else:
+        await db.admin_settings.insert_one({
+            "id": new_id(), "key": "integration_config", "label": label,
+            "description": description, "order": 0, "active": True,
+            "meta": {"value": value}, "created_at": iso(now_utc()),
+        })
+
+
+@api.get("/integrations")
+async def list_integrations(actor: dict = Depends(require_roles("super_admin"))):
+    items = await db.admin_settings.find({"key": "integration_config"}, {"_id": 0}).to_list(100)
+    # Mask secrets in listing
+    out = []
+    for it in items:
+        v = (it.get("meta") or {}).get("value", "")
+        masked = v if it["label"] in {"resend_from_email", "google_maps_api_key_public", "vapid_public_key", "cloudflare_r2_public_url", "cloudflare_r2_bucket"} else (("…" + v[-4:]) if v else "")
+        it["masked_value"] = masked
+        it["has_value"] = bool(v)
+        # remove raw value from response unless it's a public field
+        if it["label"] not in {"resend_from_email", "google_maps_api_key_public", "vapid_public_key", "cloudflare_r2_public_url", "cloudflare_r2_bucket"}:
+            it["meta"] = {"value": ""}
+        out.append(it)
+    return out
+
+
+@api.post("/integrations")
+async def set_integration(body: dict, actor: dict = Depends(require_roles("super_admin"))):
+    label = body.get("label")
+    value = body.get("value", "")
+    description = body.get("description", "")
+    if not label:
+        raise HTTPException(400, "label required")
+    await set_config(label, value, description)
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "set_integration", "target": label,
+        "details": {"has_value": bool(value)},
+        "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+@api.post("/integrations/test/{provider}")
+async def test_integration(provider: str, body: dict, actor: dict = Depends(require_roles("super_admin"))):
+    """Send a test email or check storage/maps config."""
+    if provider == "resend":
+        ok, msg = await _send_email(body.get("to", actor.get("email")), "CelestialPeopleMeeet test email", "<p>This is a test from your admin console.</p>")
+        return {"ok": ok, "message": msg}
+    if provider == "vapid":
+        # Generate VAPID keypair if not yet set
+        pub = await get_config("vapid_public_key")
+        priv = await get_config("vapid_private_key")
+        if not pub or not priv:
+            try:
+                from py_vapid import Vapid
+                v = Vapid()
+                v.generate_keys()
+                pub_pem = v.public_pem().decode("utf-8") if isinstance(v.public_pem(), bytes) else v.public_pem()
+                priv_pem = v.private_pem().decode("utf-8") if isinstance(v.private_pem(), bytes) else v.private_pem()
+                # urlsafe-base64 of raw public key
+                raw_pub = v.public_key.public_bytes(encoding=__import__("cryptography").hazmat.primitives.serialization.Encoding.X962, format=__import__("cryptography").hazmat.primitives.serialization.PublicFormat.UncompressedPoint)
+                pub_b64 = b64lib.urlsafe_b64encode(raw_pub).decode("utf-8").rstrip("=")
+                await set_config("vapid_public_key", pub_b64, "VAPID public key (URL-safe base64) for browser push")
+                await set_config("vapid_private_pem", priv_pem, "VAPID private key PEM — keep secret")
+                return {"ok": True, "message": "VAPID keys generated", "public_key": pub_b64}
+            except Exception as e:
+                return {"ok": False, "message": f"VAPID generation failed: {e}"}
+        return {"ok": True, "message": "VAPID already configured", "public_key": pub}
+    return {"ok": False, "message": "Unknown provider"}
+
+
+async def _send_email(to: str, subject: str, html: str) -> tuple[bool, str]:
+    api_key = await get_config("resend_api_key")
+    from_addr = await get_config("resend_from_email") or "CelestialPeopleMeeet <noreply@celestialpeoplemeeet.com>"
+    if not api_key:
+        log.info("[email-fallback] to=%s subject=%s body=%s", to, subject, html[:300])
+        return True, "logged (no Resend API key configured)"
+    try:
+        import resend
+        resend.api_key = api_key
+        r = resend.Emails.send({"from": from_addr, "to": to, "subject": subject, "html": html})
+        return True, f"sent id={r.get('id') if isinstance(r, dict) else r}"
+    except Exception as e:
+        log.exception("Resend send failed")
+        return False, f"failed: {e}"
+
+
+# ---------------- Public integrations endpoint ----------------
+@api.get("/integrations/public")
+async def public_integrations():
+    """Frontend-safe values: maps API key, vapid public key, r2 public base url."""
+    return {
+        "google_maps_api_key_public": await get_config("google_maps_api_key_public") or "",
+        "vapid_public_key": await get_config("vapid_public_key") or "",
+        "cloudflare_r2_public_url": await get_config("cloudflare_r2_public_url") or "",
+    }
+
+
+# ====================================================
+# PASSWORD RESET
+# ====================================================
+@api.post("/auth/forgot-password")
+async def forgot_password(body: dict):
+    email = (body.get("email") or "").lower().strip()
+    user = await db.users.find_one({"email": email})
+    if user:
+        token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.insert_one({
+            "id": new_id(), "user_id": user["id"], "token": token,
+            "used": False, "expires_at": iso(now_utc() + timedelta(hours=1)),
+            "created_at": iso(now_utc()),
+        })
+        reset_url = f"{body.get('origin', '')}/reset-password?token={token}"
+        html = f"""<p>Hello {user.get('name', 'beloved')},</p>
+<p>You requested a password reset. Click the link below to set a new password (valid for 1 hour):</p>
+<p><a href="{reset_url}">{reset_url}</a></p>
+<p>If you did not request this, you can safely ignore this email.</p>
+<p>— CelestialPeopleMeeet</p>"""
+        await _send_email(email, "Reset your CelestialPeopleMeeet password", html)
+    # Always return ok to avoid email enumeration
+    return {"ok": True, "message": "If the email exists, a reset link has been sent."}
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: dict):
+    token = body.get("token")
+    new_pw = body.get("password") or ""
+    if not token or len(new_pw) < 6:
+        raise HTTPException(400, "Invalid token or password")
+    rec = await db.password_reset_tokens.find_one({"token": token, "used": False})
+    if not rec:
+        raise HTTPException(400, "Invalid or used token")
+    if rec.get("expires_at") and datetime.fromisoformat(rec["expires_at"]) < now_utc():
+        raise HTTPException(400, "Token expired")
+    await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(new_pw)}})
+    await db.password_reset_tokens.update_one({"id": rec["id"]}, {"$set": {"used": True, "used_at": iso(now_utc())}})
+    return {"ok": True}
+
+
+# ====================================================
+# SHEPHERD ENDORSEMENT
+# ====================================================
+@api.post("/admin/users/{uid}/endorse-shepherd")
+async def endorse_shepherd(uid: str, body: dict, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    parish_id = body.get("parish_id")
+    note = body.get("note", "")
+    if not parish_id:
+        raise HTTPException(400, "parish_id required")
+    parish = await db.parishes.find_one({"id": parish_id})
+    if not parish:
+        raise HTTPException(404, "Parish not found")
+    user = await db.users.find_one({"id": uid})
+    if not user:
+        raise HTTPException(404, "User not found")
+    doc = {
+        "id": new_id(),
+        "user_id": uid,
+        "user_name": user.get("name"),
+        "parish_id": parish_id,
+        "parish_name": parish.get("name"),
+        "endorsed_by": actor["id"],
+        "endorser_name": actor.get("name"),
+        "note": note,
+        "status": "active",
+        "created_at": iso(now_utc()),
+    }
+    await db.shepherd_endorsements.insert_one(doc)
+    await db.users.update_one({"id": uid}, {"$addToSet": {"badges": "Shepherd"}, "$set": {"role": "shepherd", "assigned_parish_id": parish_id}})
+    await db.parishes.update_one({"id": parish_id}, {"$set": {"shepherd_user_id": uid, "shepherd_name": user.get("name")}})
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "endorse_shepherd", "target": uid,
+        "details": {"parish_id": parish_id, "note": note},
+        "created_at": iso(now_utc()),
+    })
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/shepherds")
+async def list_shepherds(parish_id: Optional[str] = None):
+    flt: dict = {"status": "active"}
+    if parish_id:
+        flt["parish_id"] = parish_id
+    items = await db.shepherd_endorsements.find(flt, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+
+@api.delete("/admin/endorsements/{eid}")
+async def revoke_endorsement(eid: str, actor: dict = Depends(require_roles("super_admin"))):
+    rec = await db.shepherd_endorsements.find_one({"id": eid})
+    if not rec:
+        raise HTTPException(404, "Not found")
+    await db.shepherd_endorsements.update_one({"id": eid}, {"$set": {"status": "revoked", "revoked_at": iso(now_utc())}})
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "revoke_endorsement", "target": eid,
+        "details": {}, "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+# ====================================================
+# MULTI-PARISH ADMIN ASSIGNMENT
+# ====================================================
+@api.post("/admin/users/{uid}/parishes")
+async def assign_parishes(uid: str, body: dict, actor: dict = Depends(require_roles("super_admin"))):
+    parish_ids = body.get("parish_ids") or []
+    await db.users.update_one({"id": uid}, {"$set": {"managed_parish_ids": parish_ids}})
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "assign_parishes", "target": uid,
+        "details": {"parish_ids": parish_ids}, "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+# ====================================================
+# OBJECT STORAGE — Cloudflare R2 (S3-compatible)
+# ====================================================
+@api.post("/uploads")
+async def upload_file(body: dict, actor: dict = Depends(get_current_user)):
+    """Upload base64 payload to R2 if configured, else return data URL."""
+    data_b64 = body.get("data") or ""
+    filename = body.get("filename") or f"upload-{new_id()}"
+    content_type = body.get("content_type") or "application/octet-stream"
+    if not data_b64:
+        raise HTTPException(400, "data required (base64)")
+    try:
+        if "," in data_b64:
+            data_b64 = data_b64.split(",", 1)[1]
+        raw = b64lib.b64decode(data_b64)
+    except Exception:
+        raise HTTPException(400, "invalid base64 payload")
+
+    account_id = await get_config("cloudflare_r2_account_id")
+    access_key = await get_config("cloudflare_r2_access_key_id")
+    secret_key = await get_config("cloudflare_r2_secret_access_key")
+    bucket = await get_config("cloudflare_r2_bucket")
+    public_url = await get_config("cloudflare_r2_public_url")
+
+    if not all([account_id, access_key, secret_key, bucket]):
+        # Fallback: return data URL (caller can store inline)
+        return {"url": f"data:{content_type};base64,{data_b64}", "storage": "inline"}
+
+    try:
+        import boto3
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name="auto",
+        )
+        key = f"{actor['id']}/{datetime.utcnow().strftime('%Y%m%d')}/{new_id()}-{filename}"
+        s3.put_object(Bucket=bucket, Key=key, Body=raw, ContentType=content_type)
+        url = f"{public_url.rstrip('/')}/{key}" if public_url else f"https://{account_id}.r2.cloudflarestorage.com/{bucket}/{key}"
+        return {"url": url, "key": key, "storage": "r2"}
+    except Exception as e:
+        log.exception("R2 upload failed")
+        raise HTTPException(500, f"upload failed: {e}")
+
+
+# ====================================================
+# PUSH NOTIFICATIONS — VAPID
+# ====================================================
+@api.post("/push/subscribe")
+async def push_subscribe(body: dict, actor: dict = Depends(get_current_user)):
+    sub = body.get("subscription")
+    if not sub:
+        raise HTTPException(400, "subscription required")
+    await db.push_subscriptions.update_one(
+        {"user_id": actor["id"], "endpoint": sub.get("endpoint")},
+        {"$set": {"user_id": actor["id"], "subscription": sub, "endpoint": sub.get("endpoint"), "updated_at": iso(now_utc())}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/push/test")
+async def push_test(actor: dict = Depends(get_current_user)):
+    """Send a test push to the current user."""
+    sent = await _send_push(actor["id"], "CelestialPeopleMeeet", "Push notifications are working ✨")
+    return {"ok": sent > 0, "sent": sent}
+
+
+async def _send_push(user_id: str, title: str, body: str, url: str = "/") -> int:
+    priv_pem = await get_config("vapid_private_pem")
+    if not priv_pem:
+        return 0
+    try:
+        from pywebpush import webpush, WebPushException
+    except Exception:
+        return 0
+    subs = await db.push_subscriptions.find({"user_id": user_id}, {"_id": 0}).to_list(50)
+    sent = 0
+    payload = jsonlib.dumps({"title": title, "body": body, "url": url})
+    claims = {"sub": "mailto:noreply@celestialpeoplemeeet.com"}
+    for s in subs:
+        try:
+            webpush(subscription_info=s["subscription"], data=payload, vapid_private_key=priv_pem, vapid_claims=claims)
+            sent += 1
+        except Exception as e:
+            log.warning("push failed: %s", e)
+    return sent
+
+
+# ====================================================
+# WEBSOCKET CHAT
+# ====================================================
+ws_connections: Dict[str, Set[WebSocket]] = {}
+
+
+async def _ws_user_from_token(token: Optional[str]) -> Optional[dict]:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, get_secret(), algorithms=[JWT_ALGORITHM])
+        return await db.users.find_one({"id": payload.get("sub")}, {"_id": 0, "password_hash": 0})
+    except Exception:
+        return None
+
+
+@app.websocket("/api/ws/chat")
+async def ws_chat(ws: WebSocket, token: Optional[str] = Query(None)):
+    user = await _ws_user_from_token(token)
+    if not user:
+        await ws.close(code=4401)
+        return
+    await ws.accept()
+    uid = user["id"]
+    ws_connections.setdefault(uid, set()).add(ws)
+    try:
+        while True:
+            data = await ws.receive_json()
+            to = data.get("to_user_id")
+            text = (data.get("body") or "").strip()
+            if not to or not text:
+                continue
+            pair = sorted([uid, to])
+            conv_id = f"{pair[0]}__{pair[1]}"
+            msg = {
+                "id": new_id(),
+                "conversation_id": conv_id,
+                "from_user_id": uid,
+                "from_name": user.get("name", ""),
+                "to_user_id": to,
+                "body": text,
+                "created_at": iso(now_utc()),
+            }
+            await db.direct_messages.insert_one(dict(msg))
+            await db.notifications.insert_one({
+                "id": new_id(), "user_id": to, "title": f"New message from {user.get('name', '')}",
+                "body": text[:120], "category": "message", "read": False, "created_at": iso(now_utc()),
+            })
+            # broadcast
+            for target in [to, uid]:
+                for c in list(ws_connections.get(target, [])):
+                    try:
+                        await c.send_json(msg)
+                    except Exception:
+                        ws_connections[target].discard(c)
+            # async push
+            await _send_push(to, f"{user.get('name', 'Someone')} messaged you", text[:120], "/app/messages")
+    except WebSocketDisconnect:
+        pass
+    finally:
+        ws_connections.get(uid, set()).discard(ws)
+
+
 # ---------------- Seed ----------------
 DEFAULT_RANKS = [
     "Brother", "Sister", "Evangelist", "Senior Evangelist",
@@ -1214,14 +1602,26 @@ async def on_shutdown():
 
 app.include_router(api)
 
-# CORS configuration — single middleware, reflects origin for credentials
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=".*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS configuration — explicit production origins + preview + localhost
+CORS_DEFAULT = "https://celestialpeoplemeeet.com,https://www.celestialpeoplemeeet.com,https://3b978f91-ae08-4645-8ab8-6873e3146af0.preview.emergentagent.com,http://localhost:3000"
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", CORS_DEFAULT).split(",") if o.strip()]
+_wildcard = "*" in _cors_origins
+if _wildcard:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/api/health")

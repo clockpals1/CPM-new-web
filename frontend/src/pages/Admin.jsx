@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -237,6 +237,134 @@ function AuditManager() {
   );
 }
 
+function IntegrationsManager() {
+  const [items, setItems] = useState([]);
+  const FIELDS = [
+    { label: "resend_api_key", title: "Resend API key", desc: "Used for password reset emails and notifications.", secret: true, placeholder: "re_xxx" },
+    { label: "resend_from_email", title: "Resend 'From' email", desc: "Verified sender, e.g. CelestialPeopleMeeet <noreply@celestialpeoplemeeet.com>", secret: false, placeholder: "noreply@celestialpeoplemeeet.com" },
+    { label: "google_maps_api_key_public", title: "Google Maps JS API key (public)", desc: "Used by the parish detail map.", secret: false, placeholder: "AIza…" },
+    { label: "cloudflare_r2_account_id", title: "Cloudflare R2 account ID", desc: "From your Cloudflare dashboard.", secret: false },
+    { label: "cloudflare_r2_access_key_id", title: "Cloudflare R2 access key ID", desc: "", secret: true },
+    { label: "cloudflare_r2_secret_access_key", title: "Cloudflare R2 secret", desc: "", secret: true },
+    { label: "cloudflare_r2_bucket", title: "Cloudflare R2 bucket name", desc: "", secret: false, placeholder: "celestial-media" },
+    { label: "cloudflare_r2_public_url", title: "R2 public base URL", desc: "Custom domain or pub-...r2.dev URL", secret: false, placeholder: "https://media.celestialpeoplemeeet.com" },
+    { label: "vapid_public_key", title: "VAPID public key (auto-generated)", desc: "Click Generate VAPID below if empty.", secret: false, readonly: true },
+  ];
+  const load = () => http.get("/integrations").then((r) => setItems(r.data));
+  useEffect(() => { load(); }, []);
+  const save = async (label, value) => {
+    try { await http.post("/integrations", { label, value }); toast.success(`${label} saved`); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+  const test = async (provider) => {
+    try { const { data } = await http.post(`/integrations/test/${provider}`, {}); toast[data.ok ? "success" : "error"](data.message); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+  const valueOf = (label) => items.find((i) => i.label === label)?.meta?.value || "";
+  const masked = (label) => items.find((i) => i.label === label)?.masked_value || "";
+  const has = (label) => items.find((i) => i.label === label)?.has_value || false;
+
+  return (
+    <div className="space-y-4">
+      <div className="card-surface p-5 flex flex-wrap gap-3 items-center">
+        <button onClick={() => test("vapid")} className="btn-primary inline-flex items-center gap-2" data-testid="gen-vapid"><Zap size={14} /> Generate / fetch VAPID keys</button>
+        <button onClick={() => test("resend")} className="btn-accent inline-flex items-center gap-2" data-testid="test-resend">Test Resend email</button>
+        <span className="text-xs text-[var(--text-tertiary)]">Generated keys are stored in admin settings — never hardcoded.</span>
+      </div>
+      <div className="grid gap-3">
+        {FIELDS.map((f) => (
+          <IntegrationRow key={f.label} field={f} currentValue={valueOf(f.label)} masked={masked(f.label)} hasValue={has(f.label)} onSave={save} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function IntegrationRow({ field, currentValue, masked, hasValue, onSave }) {
+  const [val, setVal] = useState(currentValue || "");
+  useEffect(() => { setVal(currentValue || ""); }, [currentValue]);
+  return (
+    <div className="card-surface p-4" data-testid={`integration-${field.label}`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-[var(--brand-primary)]">{field.title}</div>
+          <div className="text-xs text-[var(--text-tertiary)]">{field.desc}</div>
+          {field.secret && hasValue && <div className="text-[10px] text-[var(--brand-accent)] mt-1">Currently set: {masked}</div>}
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <input
+            type={field.secret ? "password" : "text"}
+            className="input-clean text-sm flex-1 sm:w-80"
+            placeholder={field.placeholder || (field.secret ? "Paste new value…" : "")}
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            readOnly={field.readonly}
+            data-testid={`integration-input-${field.label}`}
+          />
+          {!field.readonly && <button onClick={() => onSave(field.label, val)} className="btn-primary text-sm" data-testid={`integration-save-${field.label}`}>Save</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShepherdEndorsementManager() {
+  const [users, setUsers] = useState([]);
+  const [parishes, setParishes] = useState([]);
+  const [pick, setPick] = useState({});
+  const [endorsements, setEndorsements] = useState([]);
+
+  const load = () => {
+    http.get("/admin/users").then((r) => setUsers(r.data));
+    http.get("/parishes").then((r) => setParishes(r.data));
+    http.get("/shepherds").then((r) => setEndorsements(r.data));
+  };
+  useEffect(() => { load(); }, []);
+
+  const endorse = async (uid) => {
+    const parish_id = pick[uid];
+    if (!parish_id) return toast.error("Pick a parish first");
+    try { await http.post(`/admin/users/${uid}/endorse-shepherd`, { parish_id, note: "Verified shepherd for this parish." }); toast.success("Endorsed"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+  const revoke = async (eid) => {
+    try { await http.delete(`/admin/endorsements/${eid}`); toast.success("Revoked"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <h3 className="font-display text-xl mb-2 text-[var(--brand-primary)] flex items-center gap-2"><ShieldCheck size={18} className="text-[var(--brand-accent)]" /> Active Endorsements</h3>
+        {endorsements.length === 0 ? <div className="card-surface p-4 text-sm text-[var(--text-secondary)]">No endorsements yet.</div> :
+          <div className="grid sm:grid-cols-2 gap-3">
+            {endorsements.map((e) => (
+              <div key={e.id} className="card-surface p-4 text-sm border-l-4 border-[var(--brand-accent)]" data-testid={`endorsement-${e.id}`}>
+                <div className="font-medium">{e.user_name} <span className="text-[var(--brand-accent)] text-xs">Verified Shepherd</span></div>
+                <div className="text-xs text-[var(--text-tertiary)]">{e.parish_name} • by {e.endorser_name}</div>
+                <button onClick={() => revoke(e.id)} className="text-xs text-red-700 mt-2" data-testid={`revoke-${e.id}`}>Revoke</button>
+              </div>
+            ))}
+          </div>}
+      </section>
+      <section>
+        <h3 className="font-display text-xl mb-2 text-[var(--brand-primary)]">Endorse a member</h3>
+        <div className="space-y-2">
+          {users.filter((u) => u.role !== "super_admin").map((u) => (
+            <div key={u.id} className="card-surface p-3 text-sm flex flex-wrap items-center gap-3" data-testid={`endorse-row-${u.id}`}>
+              <div className="flex-1 min-w-[180px]">
+                <div className="font-medium text-[var(--brand-primary)]">{u.name}</div>
+                <div className="text-xs text-[var(--text-tertiary)]">{u.ccc_rank} • {u.country}</div>
+              </div>
+              <select value={pick[u.id] || ""} onChange={(ev) => setPick({ ...pick, [u.id]: ev.target.value })} className="input-clean text-xs max-w-[240px]" data-testid={`endorse-parish-${u.id}`}>
+                <option value="">Select parish</option>
+                {parishes.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+              </select>
+              <button onClick={() => endorse(u.id)} className="btn-accent text-xs px-3 py-1" data-testid={`endorse-btn-${u.id}`}>Endorse as Shepherd</button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const TABS = [
@@ -244,7 +372,9 @@ export default function Admin() {
     { k: "parishes", l: "Parishes", icon: Plus },
     { k: "approvals", l: "Approvals", icon: BadgeCheck },
     { k: "users", l: "Users & Roles", icon: Shield },
+    { k: "endorsements", l: "Shepherd Endorsements", icon: ShieldCheck },
     { k: "moderation", l: "Moderation", icon: FileWarning },
+    { k: "integrations", l: "Integrations", icon: Zap },
     { k: "audit", l: "Audit Log", icon: History },
   ];
   return (
@@ -264,7 +394,9 @@ export default function Admin() {
       {tab === "parishes" && <ParishesManager />}
       {tab === "approvals" && <ApprovalsManager />}
       {tab === "users" && <UsersManager />}
+      {tab === "endorsements" && <ShepherdEndorsementManager />}
       {tab === "moderation" && <ModerationManager />}
+      {tab === "integrations" && <IntegrationsManager />}
       {tab === "audit" && <AuditManager />}
     </div>
   );

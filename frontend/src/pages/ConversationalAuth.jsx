@@ -229,6 +229,11 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
         <div className="text-center mt-6 text-xs text-[var(--text-tertiary)]">
           By continuing you agree to our community guidelines. Built with reverence for the Celestial Church of Christ family.
         </div>
+        {mode === "returning" && (
+          <div className="text-center mt-2">
+            <a href="/forgot-password" className="text-xs text-[var(--brand-accent)] underline" data-testid="forgot-link">Forgot your password?</a>
+          </div>
+        )}
       </div>
     </div>
   );

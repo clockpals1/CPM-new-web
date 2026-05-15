@@ -1,0 +1,63 @@
+{
+  "summary": "Comprehensive backend regression + new-feature testing for CelestialPeopleMeeet iteration 4 (integrations, password reset, shepherd endorsement, multi-parish assignment, uploads, push, websocket chat, CORS). 83/83 tests passing (58 prior + 25 new). All new endpoints in the review request verified end-to-end. Two pre-existing test data side-effects had to be corrected (test cleanup); one infrastructure observation flagged about the preview ingress overriding CORS headers.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET https://<preview>/api/* (ingress level)",
+        "issue": "Kubernetes preview ingress OVERRIDES the backend's CORS headers and always returns 'Access-Control-Allow-Origin: *' (regardless of Origin). Backend itself (verified against http://localhost:8001) correctly echoes the allowed origin and omits ACAO for disallowed origins. With allow_credentials=true on the FastAPI middleware, the ingress wildcard would break credentialed requests from a browser — however since the served frontend is on the SAME origin as REACT_APP_BACKEND_URL, browsers don't enforce CORS for these calls. This is an infra/preview concern only; do NOT change backend code."
+      },
+      {
+        "endpoint": "/api/integrations (label semantics)",
+        "issue": "'resend_from_email' is treated as a PUBLIC label (unmasked, exposed in listing meta). Although the value of a From email is typically not secret, you may still want to mask it from non-super_admin listings if you ever expand audience. Currently /integrations is super_admin-only so this is OK."
+      },
+      {
+        "endpoint": "POST /api/uploads",
+        "issue": "Inline-fallback returns the entire base64 payload as a data: URL with no size limit. A malicious authenticated client could DoS the API or fill DB if upstream stores the data URL. Recommend enforcing a max size (e.g., 5 MB) in the handler when no R2 is configured."
+      },
+      {
+        "endpoint": "POST /api/admin/users/{uid}/parishes",
+        "issue": "Does not validate that supplied parish_ids actually exist or that the role on the target user is parish_admin. A super_admin can assign managed_parish_ids to a member or to nonexistent ids. Minor UX hardening — consider a 400 if user.role != 'parish_admin' or parishes missing."
+      },
+      {
+        "endpoint": "WS /api/ws/chat",
+        "issue": "Token is passed as a query string (?token=...) which can appear in proxy logs. Acceptable trade-off because browsers cannot send Authorization headers on WebSocket handshakes — but document the trade-off."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/pytest_results_iter4.xml"
+  ],
+  "action_items": [
+    "(Infra, not backend) Investigate why the preview-domain ingress injects 'Access-Control-Allow-Origin: *' for /api/*. If left as-is, real browser logins from a third-party domain would fail with the wildcard-vs-credentials rule. From the celestialpeoplemeeet.com production domain (served same-origin), this is harmless.",
+    "(Optional hardening) Add size limit + content-type allowlist in POST /api/uploads inline fallback to prevent base64 DoS.",
+    "(Optional hardening) /api/admin/users/{uid}/parishes should validate user.role and parish_ids existence.",
+    "(Optional refactor) Centralize 'doc.pop(\"_id\", None) after insert_one' into a helper (carried over from iteration_2).",
+    "(Optional) server.py is now 1630 lines — split into routers (auth, parishes, integrations, admin, ws) for maintainability."
+  ],
+  "critical_code_review_comments": [
+    "VAPID PEM generation works but stores the PRIVATE key in admin_settings collection in plaintext. Acceptable for self-hosted MVP but should be encrypted at rest (or moved to a secrets store) before production.",
+    "/api/auth/forgot-password embeds origin from request body — caller-controlled. If an attacker calls forgot-password with origin=https://evil.com, the reset email contains a link to evil.com that still includes a valid token. Mitigation: validate origin against CORS_ORIGINS allowlist before composing the email.",
+    "/api/uploads with R2 builds key as f\"{actor['id']}/{datetime.utcnow().strftime('%Y%m%d')}/{new_id()}-{filename}\" — filename is user-supplied; not URL-encoded. Sanitize filename (e.g., werkzeug.utils.secure_filename or strip path separators) to avoid surprising S3 keys.",
+    "WebSocket handler swallows generic exceptions silently and reuses ws_connections dict without lock. For low concurrency MVP this is fine; for higher load use an async lock or per-user queue.",
+    "list_integrations() uses startswith-style detection (a literal set of public labels). Consider tagging public/private at write time so adding a new label doesn't require code change.",
+    "Password reset token expiry comparison: datetime.fromisoformat(rec['expires_at']) < now_utc() — works because expires_at was stored with tz-aware iso(); good. But there's no rate limit on /auth/forgot-password — attacker could flood emails. Add throttling.",
+    "set_auth_cookie still hardcodes samesite='none' and secure=True; existing comment from prior iteration. Bearer fallback covers local dev.",
+    "CORS code path: when CORS_ORIGINS contains '*', `allow_origin_regex='.*' + allow_credentials=True` is used — this is the reflective pattern. Works, but for production it's better to keep explicit origins (current default in .env already does this — good)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4.py (NEW: 25 tests covering all iteration-4 endpoints)",
+    "(database side-effect cleanup) Reset member@celestialpeoplemeeet.com role from 'shepherd' back to 'member' and removed 'Shepherd' badge — leftover from prior endorse-shepherd test runs that prevented baseline test_login_member and test_member_cannot_create from passing."
+  ],
+  "success_rate": {"backend": "100% (83/83)", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "Primary super_admin: sunday@isunday.me / Gpiner0@12 (returns role=super_admin). Legacy super_admin, parish_admin, member as listed in /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created TEST_-prefixed users (test_pwreset_*, TEST_shep_*, TEST_mpa_*), VAPID public/private keys persisted to admin_settings (vapid_public_key / vapid_private_pem), and one resend_from_email setting (test@example.com). resend_api_key was set and then cleared to '' at the end of the test. These are safe to leave or to clean up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run both suites: pytest /app/backend/tests/backend_test.py /app/backend/tests/test_iteration4.py. The new test_iteration4.py uses pymongo directly to verify side effects (password_reset_tokens collection, users.managed_parish_ids); requires MONGO_URL=mongodb://localhost:27017 (which works because preview backend and test runner share the same mongo). CORS tests intentionally target http://localhost:8001 directly because preview ingress overrides ACAO. WebSocket tests use the wss://<preview>/api/ws/chat endpoint and pass JWT via ?token=. The websockets python lib v16 is required. Note: emails in DB are stored lowercased — use lowercase in test queries. If member@celestialpeoplemeeet.com is ever promoted to shepherd by an /endorse-shepherd test, reset it before running backend_test.py: db.users.update_one({'email':'member@celestialpeoplemeeet.com'}, {'$set':{'role':'member'},'$pull':{'badges':'Shepherd'}}).",
+  "rca of the issue": "Two non-bug-finding-but-noteworthy observations:\n\n(1) Preview ingress vs FastAPI CORS: When tests targeted https://<preview>/api/health with Origin headers, the response always had ACAO='*'. Inspection via curl against http://localhost:8001 (same container) showed the backend correctly echoes 'https://celestialpeoplemeeet.com' for allowed origins and omits ACAO for evil.com. Therefore the wildcard comes from the Kubernetes preview ingress (or upstream proxy) rewriting headers. Backend code is correct; updated the CORS assertions in test_iteration4.py to target localhost directly so they validate the actual middleware behavior.\n\n(2) Pre-existing /backend_test.py failures (member role=shepherd): The seed function _ensure_user does NOT overwrite role on an existing user whose password still verifies. A prior testing iteration (or the new iteration_4 endorse-shepherd flow tested previously) had promoted member@celestialpeoplemeeet.com to role='shepherd' with the 'Shepherd' badge. This caused the prior-suite TestAuth.test_login_member ('expected role member, got shepherd') and TestEvents.test_member_cannot_create ('expected 403, got 200') to fail. Reset the user via pymongo before re-running. Long-term mitigation: in iteration_4 we created throwaway TEST_shep_* users for endorsements rather than promoting seeded users — preventing this drift going forward. Consider adding a teardown that resets seeded users to their default roles."
+}

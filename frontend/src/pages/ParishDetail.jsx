@@ -1,18 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { http, formatErr } from "../lib/api";
-import { MapPin, Phone, Clock, Video, UserCheck, Loader2 } from "lucide-react";
+import { MapPin, Phone, Clock, Video, UserCheck, Loader2, BadgeCheck, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
 
 export default function ParishDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [p, setP] = useState(null);
   const [my, setMy] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [shepherds, setShepherds] = useState([]);
+  const [mapsKey, setMapsKey] = useState("");
 
   useEffect(() => {
     http.get(`/parishes/${id}`).then((r) => setP(r.data));
     http.get("/me/memberships").then((r) => setMy(r.data)).catch(() => {});
+    http.get("/shepherds", { params: { parish_id: id } }).then((r) => setShepherds(r.data)).catch(() => {});
+    http.get("/integrations/public").then((r) => setMapsKey(r.data.google_maps_api_key_public)).catch(() => {});
   }, [id]);
 
   const alreadyMember = my.some((m) => m.parish_id === id);
@@ -26,6 +32,12 @@ export default function ParishDetail() {
   };
 
   if (!p) return <div className="text-sm text-[var(--text-secondary)]">Loading parish…</div>;
+
+  const mapQuery = encodeURIComponent(`${p.address || ""} ${p.city} ${p.country}`.trim());
+  const mapEmbed = mapsKey
+    ? `https://www.google.com/maps/embed/v1/place?key=${mapsKey}&q=${mapQuery}`
+    : `https://maps.google.com/maps?q=${mapQuery}&t=&z=12&ie=UTF8&iwloc=&output=embed`;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6" data-testid="parish-detail">
       <div className="card-surface p-7">
@@ -50,6 +62,44 @@ export default function ParishDetail() {
             </button>
           )}
         </div>
+      </div>
+
+      {shepherds.length > 0 && (
+        <div className="card-surface p-6" data-testid="endorsed-shepherds">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck className="text-[var(--brand-accent)]" size={20} />
+            <h2 className="font-display text-2xl text-[var(--brand-primary)]">Verified Shepherds</h2>
+          </div>
+          <p className="text-xs text-[var(--text-tertiary)] mb-4">Endorsed by Celestial Church administration. Their identity has been verified for this parish.</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {shepherds.map((s) => (
+              <div key={s.id} className="border border-[var(--brand-accent)] bg-[var(--bg-paper)] rounded-lg p-4" data-testid={`shepherd-${s.id}`}>
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-[var(--brand-primary)] text-white grid place-items-center font-display text-lg">{(s.user_name || "S").slice(0, 1)}</div>
+                  <div>
+                    <div className="font-medium text-[var(--brand-primary)] flex items-center gap-1">{s.user_name} <BadgeCheck size={14} className="text-[var(--brand-accent)]" /></div>
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--brand-accent)]">Verified Shepherd</div>
+                  </div>
+                </div>
+                {s.note && <p className="text-xs text-[var(--text-secondary)] mt-3 italic">"{s.note}"</p>}
+                <div className="text-[10px] text-[var(--text-tertiary)] mt-2">Endorsed by {s.endorser_name} • {new Date(s.created_at).toLocaleDateString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card-surface p-2 overflow-hidden">
+        <iframe
+          title={`Map of ${p.name}`}
+          width="100%"
+          height="320"
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          src={mapEmbed}
+          className="rounded-lg"
+          data-testid="parish-map"
+        ></iframe>
       </div>
     </div>
   );
