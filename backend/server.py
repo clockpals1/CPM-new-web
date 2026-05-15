@@ -960,8 +960,14 @@ async def admin_users(user: dict = Depends(require_roles("super_admin"))):
 
 
 @api.patch("/admin/users/{uid}")
-async def admin_update_user(uid: str, body: dict, user: dict = Depends(require_roles("super_admin"))):
-    body.pop("password_hash", None); body.pop("_id", None); body.pop("id", None)
+async def admin_update_user(uid: str, body: dict, user: dict = Depends(get_current_user)):
+    # Allow self-update OR super_admin
+    if uid != user["id"] and user.get("role") != "super_admin":
+        raise HTTPException(403, "Not authorized")
+    body.pop("password_hash", None); body.pop("_id", None); body.pop("id", None); body.pop("email", None)
+    # non-admins cannot change their own role
+    if user.get("role") != "super_admin":
+        body.pop("role", None); body.pop("badges", None); body.pop("assigned_parish_id", None); body.pop("managed_parish_ids", None)
     await db.users.update_one({"id": uid}, {"$set": body})
     return {"ok": True}
 
@@ -1407,8 +1413,8 @@ async def _send_push(user_id: str, title: str, body: str, url: str = "/") -> int
     return sent
 
 
-# ====================================================
-# WEBSOCKET CHAT
+@app.on_event("startup")
+async def on_startup():
 # ====================================================
 ws_connections: Dict[str, Set[WebSocket]] = {}
 
