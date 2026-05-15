@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -52,34 +52,136 @@ function SettingsManager() {
   );
 }
 
+const BLANK_PARISH = { name: "", country: "", state: "", city: "", address: "", shepherd_name: "", phone: "", website: "", service_times: "", description: "", image_url: "", lat: "", lng: "", status: "active", join_mode: "request_only", choir_enabled: true, ministries_enabled: true };
+
+function ParishForm({ value, onChange }) {
+  const f = (k) => (e) => onChange({ ...value, [k]: e.type === "checkbox" ? e.target.checked : e.target.value });
+  return (
+    <div className="grid sm:grid-cols-2 gap-3">
+      <input className="input-clean sm:col-span-2" placeholder="Parish name *" value={value.name} onChange={f("name")} data-testid="ap-name" />
+      <input className="input-clean" placeholder="Country *" value={value.country} onChange={f("country")} data-testid="ap-country" />
+      <input className="input-clean" placeholder="State / Region" value={value.state} onChange={f("state")} />
+      <input className="input-clean" placeholder="City *" value={value.city} onChange={f("city")} data-testid="ap-city" />
+      <input className="input-clean" placeholder="Shepherd name" value={value.shepherd_name} onChange={f("shepherd_name")} />
+      <input className="input-clean sm:col-span-2" placeholder="Full address" value={value.address} onChange={f("address")} />
+      <input className="input-clean" placeholder="Phone" value={value.phone} onChange={f("phone")} />
+      <input className="input-clean" placeholder="Website URL" value={value.website} onChange={f("website")} />
+      <input className="input-clean sm:col-span-2" placeholder="Service / worship times (e.g. Sun 9am, Wed 6pm)" value={value.service_times} onChange={f("service_times")} />
+      <input className="input-clean sm:col-span-2" placeholder="Image URL (parish banner or logo)" value={value.image_url} onChange={f("image_url")} />
+      <input className="input-clean" placeholder="Latitude (e.g. 6.5244)" type="number" step="any" value={value.lat} onChange={f("lat")} data-testid="ap-lat" />
+      <input className="input-clean" placeholder="Longitude (e.g. 3.3792)" type="number" step="any" value={value.lng} onChange={f("lng")} data-testid="ap-lng" />
+      <select className="input-clean" value={value.join_mode} onChange={f("join_mode")} data-testid="ap-join-mode">
+        <option value="request_only">Join Mode: By Request (admin approval required)</option>
+        <option value="location_based">Join Mode: Location-based (auto-approve same country)</option>
+        <option value="open">Join Mode: Open (anyone joins directly)</option>
+      </select>
+      <select className="input-clean" value={value.status} onChange={f("status")} data-testid="ap-status">
+        <option value="active">Status: Active</option>
+        <option value="inactive">Status: Inactive</option>
+      </select>
+      <label className="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" checked={Boolean(value.choir_enabled)} onChange={f("choir_enabled")} className="w-4 h-4 accent-[var(--brand-primary)]" /> Choir enabled
+      </label>
+      <label className="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" checked={Boolean(value.ministries_enabled)} onChange={f("ministries_enabled")} className="w-4 h-4 accent-[var(--brand-primary)]" /> Ministries enabled
+      </label>
+      <textarea className="input-clean sm:col-span-2 min-h-[70px]" placeholder="About this parish…" value={value.description} onChange={f("description")} />
+    </div>
+  );
+}
+
 function ParishesManager() {
   const [list, setList] = useState([]);
-  const [form, setForm] = useState({ name: "", country: "", city: "", address: "", shepherd_name: "", phone: "", service_times: "", description: "" });
-  const load = () => http.get("/parishes").then((r) => setList(r.data));
+  const [form, setForm] = useState(BLANK_PARISH);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [stats, setStats] = useState({});
+  const [creating, setCreating] = useState(false);
+
+  const load = () => http.get("/parishes", { params: { status: undefined } }).then((r) => {
+    setList(r.data);
+    r.data.forEach((p) => {
+      http.get(`/parishes/${p.id}/stats`).then((s) => setStats((prev) => ({ ...prev, [p.id]: s.data }))).catch(() => {});
+    });
+  });
   useEffect(() => { load(); }, []);
+
   const create = async () => {
-    try { await http.post("/parishes", form); toast.success("Parish created"); setForm({ name: "", country: "", city: "", address: "", shepherd_name: "", phone: "", service_times: "", description: "" }); load(); } catch (e) { toast.error(formatErr(e)); }
+    if (!form.name || !form.country || !form.city) return toast.error("Name, country, and city are required.");
+    setCreating(true);
+    try {
+      await http.post("/parishes", { ...form, lat: form.lat ? parseFloat(form.lat) : null, lng: form.lng ? parseFloat(form.lng) : null });
+      toast.success("Parish created"); setForm(BLANK_PARISH); load();
+    } catch (e) { toast.error(formatErr(e)); } finally { setCreating(false); }
   };
+
+  const saveEdit = async (pid) => {
+    try {
+      await http.patch(`/parishes/${pid}`, { ...editForm, lat: editForm.lat ? parseFloat(editForm.lat) : null, lng: editForm.lng ? parseFloat(editForm.lng) : null });
+      toast.success("Parish updated"); setEditing(null); setEditForm(null); load();
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const toggleStatus = async (p) => {
+    const next = p.status === "active" ? "inactive" : "active";
+    try { await http.patch(`/parishes/${p.id}`, { status: next }); toast.success(`Parish ${next}`); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const remove = async (pid, name) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    try { await http.delete(`/parishes/${pid}`); toast.success("Deleted"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="card-surface p-5 grid sm:grid-cols-2 gap-3">
-        <input className="input-clean" placeholder="Parish name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="ap-name" />
-        <input className="input-clean" placeholder="Country" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} data-testid="ap-country" />
-        <input className="input-clean" placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} data-testid="ap-city" />
-        <input className="input-clean" placeholder="Shepherd name" value={form.shepherd_name} onChange={(e) => setForm({ ...form, shepherd_name: e.target.value })} />
-        <input className="input-clean" placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-        <input className="input-clean" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-        <input className="input-clean sm:col-span-2" placeholder="Service times" value={form.service_times} onChange={(e) => setForm({ ...form, service_times: e.target.value })} />
-        <textarea className="input-clean sm:col-span-2 min-h-[60px]" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <div className="sm:col-span-2 flex justify-end"><button onClick={create} className="btn-primary" data-testid="ap-create">Create parish</button></div>
+    <div className="space-y-6">
+      {/* Create form */}
+      <div className="card-surface p-5">
+        <h3 className="font-display text-xl text-[var(--brand-primary)] mb-4 flex items-center gap-2"><Plus size={16} /> Create new parish</h3>
+        <ParishForm value={form} onChange={setForm} />
+        <div className="flex justify-end mt-4">
+          <button onClick={create} disabled={creating} className="btn-primary inline-flex items-center gap-2" data-testid="ap-create">
+            {creating && <Loader2 size={14} className="animate-spin" />} Create Parish
+          </button>
+        </div>
       </div>
-      <div className="grid sm:grid-cols-2 gap-3">
+
+      {/* Parish list */}
+      <div className="space-y-3">
+        <div className="text-sm text-[var(--text-tertiary)] font-medium">All parishes ({list.length})</div>
         {list.map((p) => (
-          <div key={p.id} className="card-surface p-4 text-sm" data-testid={`admin-parish-${p.id}`}>
-            <div className="font-medium text-[var(--brand-primary)]">{p.name}</div>
-            <div className="text-xs text-[var(--text-tertiary)]">{p.city}, {p.country}</div>
+          <div key={p.id} className="card-surface" data-testid={`admin-parish-${p.id}`}>
+            {editing === p.id ? (
+              <div className="p-5 space-y-4">
+                <ParishForm value={editForm} onChange={setEditForm} />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setEditing(null); setEditForm(null); }} className="px-4 py-2 text-sm border border-[var(--border-default)] rounded-md">Cancel</button>
+                  <button onClick={() => saveEdit(p.id)} className="btn-primary text-sm" data-testid={`save-parish-${p.id}`}>Save changes</button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 flex flex-wrap items-start gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="font-medium text-[var(--brand-primary)]">{p.name}</div>
+                    <span className={`text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border font-semibold ${p.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{p.status}</span>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase">{p.join_mode?.replace("_", " ")}</span>
+                  </div>
+                  <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{[p.city, p.state, p.country].filter(Boolean).join(", ")}</div>
+                  {p.shepherd_name && <div className="text-xs text-[var(--text-secondary)] mt-0.5">Shepherd: {p.shepherd_name}</div>}
+                  {stats[p.id] && <div className="text-xs text-[var(--brand-accent)] mt-1">{stats[p.id].member_count} member{stats[p.id].member_count !== 1 ? "s" : ""} • {stats[p.id].pending_count} pending</div>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => { setEditing(p.id); setEditForm({ ...BLANK_PARISH, ...p, lat: p.lat ?? "", lng: p.lng ?? "" }); }} className="text-xs px-3 py-1.5 rounded-md border border-[var(--border-default)] hover:border-[var(--brand-primary)]" data-testid={`edit-parish-${p.id}`}>Edit</button>
+                  <button onClick={() => toggleStatus(p)} className={`text-xs px-3 py-1.5 rounded-md border ${p.status === "active" ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`} data-testid={`toggle-parish-${p.id}`}>
+                    {p.status === "active" ? "Deactivate" : "Activate"}
+                  </button>
+                  <button onClick={() => remove(p.id, p.name)} className="text-xs px-3 py-1.5 rounded-md border border-red-200 text-red-700 hover:bg-red-50" data-testid={`delete-parish-${p.id}`}><Trash2 size={12} /></button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
+        {list.length === 0 && <div className="card-surface p-6 text-sm text-[var(--text-secondary)] text-center">No parishes yet. Create the first one above.</div>}
       </div>
     </div>
   );
@@ -241,15 +343,18 @@ function AuditManager() {
 function IntegrationsManager() {
   const [items, setItems] = useState([]);
   const FIELDS = [
-    { label: "resend_api_key", title: "Resend API key", desc: "Used for password reset emails and notifications.", secret: true, placeholder: "re_xxx" },
+    { group: "Parish Join Rules", label: "global_join_mode", title: "Global join mode", desc: "per_parish = each parish decides; open = anyone joins directly; location_based = same-country auto-approve; request_only = always admin approval.", secret: false, placeholder: "per_parish" },
+    { label: "max_parish_memberships", title: "Max parish memberships per user", desc: "How many active + pending memberships a user may hold (default: 2).", secret: false, placeholder: "2" },
+    { label: "join_state_match_required", title: "Require state match for location-based join", desc: "Set true to also require state/region match in addition to country (default: false).", secret: false, placeholder: "false" },
+    { group: "Email (Resend)", label: "resend_api_key", title: "Resend API key", desc: "Used for password reset emails and notifications.", secret: true, placeholder: "re_xxx" },
     { label: "resend_from_email", title: "Resend 'From' email", desc: "Verified sender, e.g. CelestialPeopleMeeet <noreply@celestialpeoplemeet.com>", secret: false, placeholder: "noreply@celestialpeoplemeet.com" },
-    { label: "google_maps_api_key_public", title: "Google Maps JS API key (public)", desc: "Used by the parish detail map.", secret: false, placeholder: "AIza…" },
-    { label: "cloudflare_r2_account_id", title: "Cloudflare R2 account ID", desc: "From your Cloudflare dashboard.", secret: false },
+    { group: "Maps & Directions", label: "google_maps_api_key_public", title: "Google Maps JS API key (public)", desc: "Used by the parish detail embedded map. Must have Maps Embed API enabled.", secret: false, placeholder: "AIza…" },
+    { group: "Storage (Cloudflare R2)", label: "cloudflare_r2_account_id", title: "Cloudflare R2 account ID", desc: "From your Cloudflare dashboard.", secret: false },
     { label: "cloudflare_r2_access_key_id", title: "Cloudflare R2 access key ID", desc: "", secret: true },
     { label: "cloudflare_r2_secret_access_key", title: "Cloudflare R2 secret", desc: "", secret: true },
     { label: "cloudflare_r2_bucket", title: "Cloudflare R2 bucket name", desc: "", secret: false, placeholder: "celestial-media" },
     { label: "cloudflare_r2_public_url", title: "R2 public base URL", desc: "Custom domain or pub-...r2.dev URL", secret: false, placeholder: "https://media.celestialpeoplemeet.com" },
-    { label: "vapid_public_key", title: "VAPID public key (auto-generated)", desc: "Click Generate VAPID below if empty.", secret: false, readonly: true },
+    { group: "Push Notifications", label: "vapid_public_key", title: "VAPID public key (auto-generated)", desc: "Click Generate VAPID below if empty.", secret: false, readonly: true },
   ];
   const load = () => http.get("/integrations").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -272,7 +377,10 @@ function IntegrationsManager() {
       </div>
       <div className="grid gap-3">
         {FIELDS.map((f) => (
-          <IntegrationRow key={f.label} field={f} currentValue={valueOf(f.label)} masked={masked(f.label)} hasValue={has(f.label)} onSave={save} />
+          <React.Fragment key={f.label}>
+            {f.group && <div className="pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-accent)] border-b border-[var(--border-default)]">{f.group}</div>}
+            <IntegrationRow field={f} currentValue={valueOf(f.label)} masked={masked(f.label)} hasValue={has(f.label)} onSave={save} />
+          </React.Fragment>
         ))}
       </div>
     </div>

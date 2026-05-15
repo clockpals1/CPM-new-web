@@ -151,13 +151,21 @@ class ParishIn(BaseModel):
     name: str
     country: str
     city: str
+    state: Optional[str] = ""
     address: Optional[str] = ""
     shepherd_name: Optional[str] = ""
     phone: Optional[str] = ""
+    website: Optional[str] = ""
     service_times: Optional[str] = ""
     livestream_url: Optional[str] = ""
     description: Optional[str] = ""
+    image_url: Optional[str] = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     status: Optional[str] = "active"
+    join_mode: Optional[str] = "request_only"  # open | location_based | request_only
+    choir_enabled: Optional[bool] = True
+    ministries_enabled: Optional[bool] = True
 
 
 class SettingItemIn(BaseModel):
@@ -354,7 +362,7 @@ async def refresh_token(request: Request, response: Response):
 SETTING_KEYS = {
     "ccc_ranks", "badges", "event_categories", "service_types",
     "prayer_categories", "job_categories", "report_reasons",
-    "integration_config", "livestream_providers",
+    "integration_config", "livestream_providers", "parish_join_rules",
 }
 
 
@@ -402,20 +410,38 @@ async def delete_setting(item_id: str, user: dict = Depends(require_roles("super
 
 # ---------------- Parishes ----------------
 @api.get("/parishes")
-async def list_parishes(q: Optional[str] = None, country: Optional[str] = None, city: Optional[str] = None, limit: int = 200):
+async def list_parishes(
+    q: Optional[str] = None,
+    country: Optional[str] = None,
+    state: Optional[str] = None,
+    city: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 200,
+):
     flt: dict = {}
     if country:
         flt["country"] = {"$regex": f"^{country}$", "$options": "i"}
+    if state:
+        flt["state"] = {"$regex": f"^{state}$", "$options": "i"}
     if city:
         flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+    if status:
+        flt["status"] = status
+    else:
+        flt["status"] = "active"  # default: active parishes only
     if q:
         flt["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
             {"address": {"$regex": q, "$options": "i"}},
             {"shepherd_name": {"$regex": q, "$options": "i"}},
             {"city": {"$regex": q, "$options": "i"}},
+            {"state": {"$regex": q, "$options": "i"}},
+            {"country": {"$regex": q, "$options": "i"}},
         ]
     items = await db.parishes.find(flt, {"_id": 0}).limit(limit).to_list(limit)
+    # Attach member_count to each result
+    for p in items:
+        p["member_count"] = await db.parish_memberships.count_documents({"parish_id": p["id"], "status": "approved"})
     return items
 
 
@@ -473,6 +499,118 @@ async def update_parish(pid: str, body: dict, user: dict = Depends(require_roles
 async def delete_parish(pid: str, user: dict = Depends(require_roles("super_admin"))):
     await db.parishes.delete_one({"id": pid})
     return {"ok": True}
+
+
+@api.get("/parishes/{pid}/stats")
+async def parish_stats(pid: str):
+    p = await db.parishes.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Parish not found")
+    member_count = await db.parish_memberships.count_documents({"parish_id": pid, "status": "approved"})
+    pending_count = await db.parish_memberships.count_documents({"parish_id": pid, "status": "pending"})
+    return {"member_count": member_count, "pending_count": pending_count}
+
+
+@api.get("/parishes/{pid}/members")
+async def parish_members(pid: str, user: dict = Depends(get_current_user)):
+    """List approved members of a parish. Accessible to members and admins."""
+    if user.get("role") not in ("super_admin", "parish_admin"):
+        is_member = await db.parish_memberships.find_one({"user_id": user["id"], "parish_id": pid, "status": "approved"})
+        if not is_member:
+            raise HTTPException(403, "Not a member of this parish")
+    memberships = await db.parish_memberships.find({"parish_id": pid, "status": "approved"}, {"_id": 0}).to_list(200)
+    out = []
+    for m in memberships:
+        u = await db.users.find_one({"id": m["user_id"]}, {"_id": 0, "password_hash": 0})
+        if u:
+            out.append({"membership_id": m["id"], "joined_at": m.get("approved_at", m.get("created_at")), "user_id": u["id"], "name": u["name"], "ccc_rank": u.get("ccc_rank", ""), "country": u.get("country", ""), "city": u.get("city", ""), "avatar": u.get("avatar", "")})
+    return out
+
+
+@api.get("/parishes/{pid}/eligibility")
+async def parish_join_eligibility(pid: str, user: dict = Depends(get_current_user)):
+    """Return whether this user can directly join or must request."""
+    p = await db.parishes.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Parish not found")
+    if p.get("status") != "active":
+        return {"can_direct_join": False, "can_request": False, "already_member": False, "pending": False, "reason": "parish_inactive"}
+    existing = await db.parish_memberships.find_one({"user_id": user["id"], "parish_id": pid, "status": {"$in": ["approved", "pending"]}})
+    if existing:
+        approved = existing["status"] == "approved"
+        return {"can_direct_join": False, "can_request": False, "already_member": approved, "pending": not approved, "reason": "already_member" if approved else "request_pending"}
+    active = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "approved"})
+    pending = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "pending"})
+    max_m = int(await get_config("max_parish_memberships") or "2")
+    if active + pending >= max_m:
+        return {"can_direct_join": False, "can_request": False, "already_member": False, "pending": False, "reason": "membership_limit", "max": max_m}
+    global_mode = await get_config("global_join_mode") or "per_parish"
+    join_mode = p.get("join_mode", "request_only") if global_mode == "per_parish" else global_mode
+    if join_mode == "open":
+        return {"can_direct_join": True, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False, "reason": "open"}
+    if join_mode == "location_based":
+        country_match = (user.get("country", "").strip().lower() == p.get("country", "").strip().lower())
+        state_req = (await get_config("join_state_match_required") or "false").lower() == "true"
+        state_match = True
+        if state_req:
+            state_match = (user.get("state", "").strip().lower() == p.get("state", "").strip().lower())
+        can_direct = country_match and state_match
+        return {"can_direct_join": can_direct, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False,
+                "reason": "location_match" if can_direct else "outside_area",
+                "country_match": country_match, "state_match_required": state_req}
+    return {"can_direct_join": False, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False, "reason": "request_only"}
+
+
+@api.post("/parishes/{pid}/join")
+async def join_parish(pid: str, body: dict = {}, user: dict = Depends(get_current_user)):
+    """Direct join (open/location_based) or create pending request."""
+    p = await db.parishes.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Parish not found")
+    if p.get("status") != "active":
+        raise HTTPException(400, "Parish is not currently active")
+    existing = await db.parish_memberships.find_one({"user_id": user["id"], "parish_id": pid, "status": {"$in": ["approved", "pending"]}})
+    if existing:
+        raise HTTPException(400, "Already a member or request pending")
+    active = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "approved"})
+    pending = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "pending"})
+    max_m = int(await get_config("max_parish_memberships") or "2")
+    if active + pending >= max_m:
+        raise HTTPException(400, f"Maximum of {max_m} active parish memberships allowed")
+    global_mode = await get_config("global_join_mode") or "per_parish"
+    join_mode = p.get("join_mode", "request_only") if global_mode == "per_parish" else global_mode
+    status = "pending"
+    approved_at = None
+    if join_mode == "open":
+        status = "approved"
+        approved_at = iso(now_utc())
+    elif join_mode == "location_based":
+        country_match = (user.get("country", "").strip().lower() == p.get("country", "").strip().lower())
+        if country_match:
+            status = "approved"
+            approved_at = iso(now_utc())
+    doc = {
+        "id": new_id(), "user_id": user["id"], "parish_id": pid,
+        "status": status, "note": (body or {}).get("note", ""),
+        "join_mode_used": join_mode, "created_at": iso(now_utc()),
+    }
+    if approved_at:
+        doc["approved_at"] = approved_at
+    await db.parish_memberships.insert_one(doc)
+    doc.pop("_id", None)
+    if status == "approved":
+        await db.notifications.insert_one({
+            "id": new_id(), "user_id": user["id"], "title": "Parish membership confirmed",
+            "body": f"You have joined {p['name']}. Welcome home!",
+            "category": "membership", "read": False, "created_at": iso(now_utc()),
+        })
+        await db.audit_logs.insert_one({
+            "id": new_id(), "actor_id": user["id"], "actor_name": user.get("name"),
+            "action": "parish_join_direct", "target": pid,
+            "details": {"parish_name": p.get("name"), "join_mode": join_mode},
+            "created_at": iso(now_utc()),
+        })
+    return {**doc, "joined": status == "approved", "pending": status == "pending", "parish_name": p.get("name")}
 
 
 # ---------------- Memberships ----------------
@@ -1575,6 +1713,15 @@ async def on_startup():
         await _ensure_setting("job_categories", j, i)
     for i, r in enumerate(DEFAULT_REPORT_REASONS):
         await _ensure_setting("report_reasons", r, i)
+
+    # seed parish join rule defaults (stored as integration_config)
+    join_rule_defaults = [
+        {"label": "global_join_mode", "meta": {"value": "per_parish"}, "description": "per_parish | open | location_based | request_only"},
+        {"label": "max_parish_memberships", "meta": {"value": "2"}, "description": "Maximum active + pending memberships per user"},
+        {"label": "join_state_match_required", "meta": {"value": "false"}, "description": "Require state match for location_based join (true|false)"},
+    ]
+    for jrd in join_rule_defaults:
+        await _ensure_setting("integration_config", jrd["label"], 0, jrd["meta"])
 
     # seed parishes
     parish_ids = []
