@@ -1413,8 +1413,8 @@ async def _send_push(user_id: str, title: str, body: str, url: str = "/") -> int
     return sent
 
 
-@app.on_event("startup")
-async def on_startup():
+# ====================================================
+# WEBSOCKET — Real-time chat
 # ====================================================
 ws_connections: Dict[str, Set[WebSocket]] = {}
 
