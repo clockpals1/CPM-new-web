@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -22,6 +22,8 @@ import Admin from "./pages/Admin";
 import Testimonies from "./pages/Testimonies";
 import Profile from "./pages/Profile";
 import GlobalFeed from "./pages/GlobalFeed";
+import { ForgotPassword, ResetPassword } from "./pages/PasswordReset";
+import { ensureServiceWorker } from "./lib/push";
 
 function Loader() {
   return (

@@ -1315,8 +1315,11 @@ async def assign_parishes(uid: str, body: dict, actor: dict = Depends(require_ro
 @api.post("/uploads")
 async def upload_file(body: dict, actor: dict = Depends(get_current_user)):
     """Upload base64 payload to R2 if configured, else return data URL."""
+    import re as _re
     data_b64 = body.get("data") or ""
-    filename = body.get("filename") or f"upload-{new_id()}"
+    raw_filename = body.get("filename") or f"upload-{new_id()}"
+    # sanitize filename: strip path separators, keep alnum + ._-
+    safe_filename = _re.sub(r"[^A-Za-z0-9._-]+", "_", raw_filename.split("/")[-1].split("\\")[-1])[:120] or new_id()
     content_type = body.get("content_type") or "application/octet-stream"
     if not data_b64:
         raise HTTPException(400, "data required (base64)")
@@ -1326,6 +1329,9 @@ async def upload_file(body: dict, actor: dict = Depends(get_current_user)):
         raw = b64lib.b64decode(data_b64)
     except Exception:
         raise HTTPException(400, "invalid base64 payload")
+    # 5MB max for inline; 25MB for R2
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(413, "file too large (max 25MB)")
 
     account_id = await get_config("cloudflare_r2_account_id")
     access_key = await get_config("cloudflare_r2_access_key_id")
@@ -1334,7 +1340,9 @@ async def upload_file(body: dict, actor: dict = Depends(get_current_user)):
     public_url = await get_config("cloudflare_r2_public_url")
 
     if not all([account_id, access_key, secret_key, bucket]):
-        # Fallback: return data URL (caller can store inline)
+        # Fallback: return data URL — inline path; cap at 5MB
+        if len(raw) > 5 * 1024 * 1024:
+            raise HTTPException(413, "file too large for inline storage (max 5MB); configure R2 for larger files")
         return {"url": f"data:{content_type};base64,{data_b64}", "storage": "inline"}
 
     try:
@@ -1346,7 +1354,7 @@ async def upload_file(body: dict, actor: dict = Depends(get_current_user)):
             aws_secret_access_key=secret_key,
             region_name="auto",
         )
-        key = f"{actor['id']}/{datetime.utcnow().strftime('%Y%m%d')}/{new_id()}-{filename}"
+        key = f"{actor['id']}/{datetime.utcnow().strftime('%Y%m%d')}/{new_id()}-{safe_filename}"
         s3.put_object(Bucket=bucket, Key=key, Body=raw, ContentType=content_type)
         url = f"{public_url.rstrip('/')}/{key}" if public_url else f"https://{account_id}.r2.cloudflarestorage.com/{bucket}/{key}"
         return {"url": url, "key": key, "storage": "r2"}
