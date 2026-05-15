@@ -1,0 +1,27 @@
+# Render deployment configuration for CelestialPeopleMeeet backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: cpm-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URL
+        sync: false          # Set in Render dashboard — MongoDB Atlas connection string
+      - key: DB_NAME
+        value: celestialpeoplemeet
+      - key: JWT_SECRET
+        generateValue: true  # Render auto-generates a secure random value
+      - key: ADMIN_EMAIL
+        sync: false          # Your super admin email
+      - key: ADMIN_PASSWORD
+        sync: false          # Your super admin password
+      - key: ADMIN_NAME
+        value: Super Admin
+      - key: CORS_ORIGINS
+        value: https://celestialpeoplemeet.com,https://www.celestialpeoplemeet.com
