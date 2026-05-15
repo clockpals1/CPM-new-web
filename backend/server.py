@@ -273,6 +273,7 @@ async def register(req: RegisterReq, response: Response):
         "created_at": iso(now_utc()),
     }
     await db.users.insert_one(doc)
+    doc.pop("_id", None)
 
     # Optional parish join request from onboarding
     if req.parish_id:
@@ -967,7 +968,94 @@ async def admin_award_badge(uid: str, body: dict, user: dict = Depends(require_r
     if not badge:
         raise HTTPException(400, "badge required")
     await db.users.update_one({"id": uid}, {"$addToSet": {"badges": badge}})
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": user["id"], "actor_name": user.get("name"),
+        "action": "award_badge", "target": uid, "details": {"badge": badge},
+        "created_at": iso(now_utc()),
+    })
     return {"ok": True}
+
+
+@api.post("/admin/users/{uid}/role")
+async def admin_set_role(uid: str, body: dict, actor: dict = Depends(require_roles("super_admin"))):
+    role = body.get("role")
+    parish_id = body.get("parish_id")
+    if role not in ("member", "parish_admin", "shepherd", "moderator", "super_admin"):
+        raise HTTPException(400, "Invalid role")
+    update = {"role": role}
+    if parish_id:
+        update["assigned_parish_id"] = parish_id
+    await db.users.update_one({"id": uid}, {"$set": update})
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "set_role", "target": uid, "details": {"role": role, "parish_id": parish_id},
+        "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+# ---------------- Moderation / Reports ----------------
+@api.post("/reports")
+async def create_report(body: dict, user: dict = Depends(get_current_user)):
+    doc = {
+        "id": new_id(),
+        "reporter_id": user["id"],
+        "reporter_name": user.get("name"),
+        "target_type": body.get("target_type"),  # post|prayer|testimony|user|comment
+        "target_id": body.get("target_id"),
+        "reason": body.get("reason", "Other"),
+        "note": body.get("note", ""),
+        "status": "open",  # open | resolved | dismissed
+        "created_at": iso(now_utc()),
+    }
+    await db.reports.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/admin/reports")
+async def list_reports(status: Optional[str] = None, actor: dict = Depends(require_roles("super_admin", "parish_admin", "moderator"))):
+    flt: dict = {}
+    if status:
+        flt["status"] = status
+    return await db.reports.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.post("/admin/reports/{rid}/resolve")
+async def resolve_report(rid: str, body: dict, actor: dict = Depends(require_roles("super_admin", "parish_admin", "moderator"))):
+    action = body.get("action", "dismiss")  # dismiss | hide | delete
+    r = await db.reports.find_one({"id": rid})
+    if not r:
+        raise HTTPException(404, "Not found")
+    if action in ("hide", "delete"):
+        tt = r.get("target_type")
+        tid = r.get("target_id")
+        if tt == "post":
+            await db.feed_posts.update_one({"id": tid}, {"$set": {"hidden": True}})
+            if action == "delete":
+                await db.feed_posts.delete_one({"id": tid})
+        elif tt == "prayer":
+            await db.prayer_requests.update_one({"id": tid}, {"$set": {"hidden": True}})
+            if action == "delete":
+                await db.prayer_requests.delete_one({"id": tid})
+        elif tt == "testimony":
+            await db.testimonies.update_one({"id": tid}, {"$set": {"hidden": True}})
+            if action == "delete":
+                await db.testimonies.delete_one({"id": tid})
+    await db.reports.update_one({"id": rid}, {"$set": {"status": "resolved", "resolved_action": action, "resolved_by": actor["id"], "resolved_at": iso(now_utc())}})
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": f"report_{action}", "target": rid,
+        "details": {"target_type": r.get("target_type"), "target_id": r.get("target_id")},
+        "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+# ---------------- Audit Log ----------------
+@api.get("/admin/audit-logs")
+async def audit_logs(actor: dict = Depends(require_roles("super_admin"))):
+    return await db.audit_logs.find({}, {"_id": 0}).sort("created_at", -1).limit(500).to_list(500)
 
 
 @api.get("/admin/parish-suggestions")

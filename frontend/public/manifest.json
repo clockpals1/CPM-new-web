@@ -1,0 +1,17 @@
+{
+  "short_name": "CelestialPeopleMeeet",
+  "name": "CelestialPeopleMeeet — Worldwide CCC Community",
+  "description": "Discover parishes, pray, sing, serve, and connect with the worldwide Celestial Church of Christ family.",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0F1E38",
+  "background_color": "#FDFBF7"
+}

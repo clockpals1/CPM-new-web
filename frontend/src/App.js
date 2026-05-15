@@ -19,6 +19,9 @@ import Careers from "./pages/Careers";
 import Messages from "./pages/Messages";
 import Notifications from "./pages/Notifications";
 import Admin from "./pages/Admin";
+import Testimonies from "./pages/Testimonies";
+import Profile from "./pages/Profile";
+import GlobalFeed from "./pages/GlobalFeed";
 
 function Loader() {
   return (
@@ -71,6 +74,9 @@ function App() {
           <Route path="/app/careers" element={<Protected><AppLayout><Careers /></AppLayout></Protected>} />
           <Route path="/app/messages" element={<Protected><AppLayout><Messages /></AppLayout></Protected>} />
           <Route path="/app/notifications" element={<Protected><AppLayout><Notifications /></AppLayout></Protected>} />
+          <Route path="/app/testimonies" element={<Protected><AppLayout><Testimonies /></AppLayout></Protected>} />
+          <Route path="/app/feed" element={<Protected><AppLayout><GlobalFeed /></AppLayout></Protected>} />
+          <Route path="/app/profile" element={<Protected><AppLayout><Profile /></AppLayout></Protected>} />
           <Route path="/app/admin" element={<AdminGate><AppLayout><Admin /></AppLayout></AdminGate>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

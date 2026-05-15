@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -87,15 +87,18 @@ function ParishesManager() {
 function ApprovalsManager() {
   const [pending, setPending] = useState([]);
   const [choirPending, setChoirPending] = useState([]);
+  const [servicePending, setServicePending] = useState([]);
   const load = () => {
     http.get("/memberships/pending").then((r) => setPending(r.data)).catch(() => {});
     http.get("/choir/pending").then((r) => setChoirPending(r.data)).catch(() => {});
+    http.get("/service/pending").then((r) => setServicePending(r.data)).catch(() => {});
   };
   useEffect(() => { load(); }, []);
-  const approve = async (id) => { try { await http.post(`/memberships/${id}/approve`); toast.success("Approved"); load(); } catch (e) { toast.error(formatErr(e)); } };
-  const reject = async (id) => { try { await http.post(`/memberships/${id}/reject`); load(); } catch {} };
+  const approveMembership = async (id) => { try { await http.post(`/memberships/${id}/approve`); toast.success("Approved"); load(); } catch (e) { toast.error(formatErr(e)); } };
+  const rejectMembership = async (id) => { try { await http.post(`/memberships/${id}/reject`); load(); } catch {} };
   const verifyChoir = async (id) => { try { await http.post(`/choir/${id}/verify`); toast.success("Choir member verified"); load(); } catch (e) { toast.error(formatErr(e)); } };
   const promote = async (id) => { try { await http.post(`/choir/${id}/promote`); toast.success("Promoted to choir director"); load(); } catch (e) { toast.error(formatErr(e)); } };
+  const approveService = async (id) => { try { await http.post(`/service/${id}/approve`); toast.success("Service approved"); load(); } catch (e) { toast.error(formatErr(e)); } };
 
   return (
     <div className="space-y-6">
@@ -108,8 +111,8 @@ function ApprovalsManager() {
                 <div className="font-medium">{m.user?.name} → {m.parish?.name}</div>
                 <div className="text-xs text-[var(--text-tertiary)]">{m.user?.ccc_rank} • {m.user?.country}</div>
                 <div className="flex gap-2 mt-2">
-                  <button onClick={() => approve(m.id)} className="btn-primary text-xs px-3 py-1" data-testid={`approve-${m.id}`}>Approve</button>
-                  <button onClick={() => reject(m.id)} className="text-xs px-3 py-1 rounded-md border border-[var(--border-default)]">Reject</button>
+                  <button onClick={() => approveMembership(m.id)} className="btn-primary text-xs px-3 py-1" data-testid={`approve-${m.id}`}>Approve</button>
+                  <button onClick={() => rejectMembership(m.id)} className="text-xs px-3 py-1 rounded-md border border-[var(--border-default)]">Reject</button>
                 </div>
               </div>
             ))}
@@ -131,12 +134,119 @@ function ApprovalsManager() {
             ))}
           </div>}
       </section>
+      <section>
+        <h3 className="font-display text-xl mb-2 text-[var(--brand-primary)]">Pending service requests</h3>
+        {servicePending.length === 0 ? <div className="text-sm text-[var(--text-secondary)]">No pending service requests.</div> :
+          <div className="grid md:grid-cols-2 gap-3">
+            {servicePending.map((s) => (
+              <div key={s.id} className="card-surface p-4 text-sm" data-testid={`service-pending-${s.id}`}>
+                <div className="font-medium">{s.user_name} → {s.service_type}</div>
+                <button onClick={() => approveService(s.id)} className="btn-primary text-xs px-3 py-1 mt-2">Approve</button>
+              </div>
+            ))}
+          </div>}
+      </section>
+    </div>
+  );
+}
+
+function UsersManager() {
+  const [users, setUsers] = useState([]);
+  const [parishes, setParishes] = useState([]);
+  const [badges, setBadges] = useState([]);
+  const load = () => http.get("/admin/users").then((r) => setUsers(r.data));
+  useEffect(() => {
+    load();
+    http.get("/parishes").then((r) => setParishes(r.data));
+    http.get("/settings/badges").then((r) => setBadges(r.data));
+  }, []);
+  const setRole = async (uid, role, parish_id) => { try { await http.post(`/admin/users/${uid}/role`, { role, parish_id }); toast.success("Role updated"); load(); } catch (e) { toast.error(formatErr(e)); } };
+  const awardBadge = async (uid, badge) => { try { await http.post(`/admin/users/${uid}/badge`, { badge }); toast.success("Badge awarded"); load(); } catch (e) { toast.error(formatErr(e)); } };
+  return (
+    <div className="space-y-3">
+      {users.map((u) => (
+        <div key={u.id} className="card-surface p-4 text-sm flex flex-wrap items-center gap-3" data-testid={`user-${u.id}`}>
+          <div className="flex-1 min-w-[180px]">
+            <div className="font-medium text-[var(--brand-primary)]">{u.name}</div>
+            <div className="text-xs text-[var(--text-tertiary)]">{u.email} • {u.ccc_rank} • {u.country}</div>
+            {u.badges?.length > 0 && <div className="text-[10px] mt-1 text-[var(--brand-accent)]">{u.badges.join(" • ")}</div>}
+          </div>
+          <select defaultValue={u.role} onChange={(e) => setRole(u.id, e.target.value, u.assigned_parish_id)} className="input-clean text-xs max-w-[180px]" data-testid={`role-${u.id}`}>
+            {["member", "moderator", "shepherd", "parish_admin", "super_admin"].map((r) => (<option key={r} value={r}>{r}</option>))}
+          </select>
+          <select defaultValue={u.assigned_parish_id || ""} onChange={(e) => setRole(u.id, u.role, e.target.value)} className="input-clean text-xs max-w-[200px]">
+            <option value="">No parish assigned</option>
+            {parishes.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+          </select>
+          <select onChange={(e) => e.target.value && awardBadge(u.id, e.target.value)} defaultValue="" className="input-clean text-xs max-w-[180px]" data-testid={`badge-select-${u.id}`}>
+            <option value="">Award badge…</option>
+            {badges.map((b) => (<option key={b.id} value={b.label}>{b.label}</option>))}
+          </select>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ModerationManager() {
+  const [reports, setReports] = useState([]);
+  const load = () => http.get("/admin/reports", { params: { status: "open" } }).then((r) => setReports(r.data)).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const act = async (id, action) => { try { await http.post(`/admin/reports/${id}/resolve`, { action }); toast.success(`Report ${action}`); load(); } catch (e) { toast.error(formatErr(e)); } };
+  if (reports.length === 0) return <div className="card-surface p-5 text-sm text-[var(--text-secondary)]">No open reports.</div>;
+  return (
+    <div className="space-y-3">
+      {reports.map((r) => (
+        <div key={r.id} className="card-surface p-4 text-sm" data-testid={`report-${r.id}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-medium text-[var(--brand-primary)]">{r.target_type} flagged: <span className="text-[var(--brand-accent)]">{r.reason}</span></div>
+              <div className="text-xs text-[var(--text-tertiary)]">By {r.reporter_name} • {new Date(r.created_at).toLocaleString()} • target id: {r.target_id}</div>
+              {r.note && <div className="text-xs mt-1">{r.note}</div>}
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={() => act(r.id, "dismiss")} className="text-xs px-3 py-1 rounded-md border border-[var(--border-default)]" data-testid={`dismiss-${r.id}`}>Dismiss</button>
+              <button onClick={() => act(r.id, "hide")} className="text-xs px-3 py-1 rounded-md border border-orange-700 text-orange-700" data-testid={`hide-${r.id}`}>Hide</button>
+              <button onClick={() => act(r.id, "delete")} className="text-xs px-3 py-1 rounded-md bg-red-700 text-white" data-testid={`delete-${r.id}`}>Delete</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AuditManager() {
+  const [logs, setLogs] = useState([]);
+  useEffect(() => { http.get("/admin/audit-logs").then((r) => setLogs(r.data)).catch(() => {}); }, []);
+  return (
+    <div className="card-surface p-5">
+      {logs.length === 0 ? <div className="text-sm text-[var(--text-secondary)]">No audit entries yet.</div> :
+        <div className="space-y-2 text-sm">
+          {logs.map((l) => (
+            <div key={l.id} className="flex items-start gap-3 border-b border-[var(--border-default)] pb-2 last:border-0" data-testid={`audit-${l.id}`}>
+              <History size={14} className="text-[var(--text-tertiary)] mt-1" />
+              <div className="flex-1">
+                <div><span className="font-medium">{l.actor_name}</span> <span className="text-[var(--text-tertiary)]">{l.action}</span> → <span className="text-[var(--brand-primary)]">{l.target}</span></div>
+                <div className="text-xs text-[var(--text-tertiary)]">{new Date(l.created_at).toLocaleString()} {l.details ? `• ${JSON.stringify(l.details)}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>}
     </div>
   );
 }
 
 export default function Admin() {
   const [tab, setTab] = useState("settings");
+  const TABS = [
+    { k: "settings", l: "Settings & Catalog", icon: BadgeCheck },
+    { k: "parishes", l: "Parishes", icon: Plus },
+    { k: "approvals", l: "Approvals", icon: BadgeCheck },
+    { k: "users", l: "Users & Roles", icon: Shield },
+    { k: "moderation", l: "Moderation", icon: FileWarning },
+    { k: "audit", l: "Audit Log", icon: History },
+  ];
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
@@ -144,13 +254,18 @@ export default function Admin() {
         <h1 className="font-display text-3xl sm:text-4xl text-[var(--brand-primary)]">Admin Console</h1>
       </div>
       <div className="flex gap-2 flex-wrap">
-        {[{ k: "settings", l: "Settings & Catalog" }, { k: "parishes", l: "Parishes" }, { k: "approvals", l: "Approvals" }].map((t) => (
-          <button key={t.k} onClick={() => setTab(t.k)} data-testid={`admin-tab-${t.k}`} className={`px-4 py-2 rounded-md border text-sm ${tab === t.k ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)]"}`}>{t.l}</button>
+        {TABS.map((t) => (
+          <button key={t.k} onClick={() => setTab(t.k)} data-testid={`admin-tab-${t.k}`} className={`px-4 py-2 rounded-md border text-sm inline-flex items-center gap-2 ${tab === t.k ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)]"}`}>
+            <t.icon size={14} /> {t.l}
+          </button>
         ))}
       </div>
       {tab === "settings" && <SettingsManager />}
       {tab === "parishes" && <ParishesManager />}
       {tab === "approvals" && <ApprovalsManager />}
+      {tab === "users" && <UsersManager />}
+      {tab === "moderation" && <ModerationManager />}
+      {tab === "audit" && <AuditManager />}
     </div>
   );
 }

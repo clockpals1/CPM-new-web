@@ -3,14 +3,16 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Home, Church, Users, HandHelping, Calendar, Music, Briefcase,
-  Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search
+  Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search, Globe2, UserCircle
 } from "lucide-react";
 
 const NAV = [
   { to: "/app", label: "Home", icon: Home, end: true, testid: "nav-home" },
   { to: "/app/parishes", label: "Parishes", icon: Church, testid: "nav-parishes" },
   { to: "/app/my-parish", label: "My Parish", icon: Sparkles, testid: "nav-myparish" },
+  { to: "/app/feed", label: "Global Feed", icon: Globe2, testid: "nav-feed" },
   { to: "/app/prayer", label: "Prayer Wall", icon: Heart, testid: "nav-prayer" },
+  { to: "/app/testimonies", label: "Testimonies", icon: Sparkles, testid: "nav-testimonies" },
   { to: "/app/events", label: "Events", icon: Calendar, testid: "nav-events" },
   { to: "/app/choir", label: "Choir", icon: Music, testid: "nav-choir" },
   { to: "/app/service", label: "Service", icon: HandHelping, testid: "nav-service" },
@@ -103,9 +105,9 @@ export default function AppLayout({ children }) {
                 <div className="text-sm font-medium text-[var(--text-primary)]" data-testid="topbar-user-name">{user?.name}</div>
                 <div className="text-[11px] text-[var(--text-tertiary)]">{user?.ccc_rank || user?.role}</div>
               </div>
-              <div className="w-9 h-9 rounded-full bg-[var(--brand-secondary)] text-white grid place-items-center text-sm font-medium" data-testid="topbar-avatar">
+              <Link to="/app/profile" data-testid="topbar-avatar" className="w-9 h-9 rounded-full bg-[var(--brand-secondary)] text-white grid place-items-center text-sm font-medium hover:ring-2 hover:ring-[var(--brand-accent)] transition">
                 {(user?.name || "U").slice(0, 1).toUpperCase()}
-              </div>
+              </Link>
             </div>
           </div>
         </header>

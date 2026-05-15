@@ -1,8 +1,32 @@
 import React, { useEffect, useState } from "react";
 import { http, formatErr } from "../lib/api";
 import { Link } from "react-router-dom";
-import { Heart, MessageCircle, Send, Loader2 } from "lucide-react";
+import { Heart, MessageCircle, Send, Loader2, Flag, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+
+function CommentSection({ postId }) {
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState("");
+  useEffect(() => { http.get(`/posts/${postId}/comments`).then((r) => setComments(r.data)); }, [postId]);
+  const submit = async () => {
+    if (!text.trim()) return;
+    try { const { data } = await http.post(`/posts/${postId}/comments`, { body: text }); setComments([...comments, data]); setText(""); } catch (e) { toast.error(formatErr(e)); }
+  };
+  return (
+    <div className="mt-3 border-t border-[var(--border-default)] pt-3 space-y-2">
+      {comments.map((c) => (
+        <div key={c.id} className="text-sm" data-testid={`comment-${c.id}`}>
+          <span className="font-medium text-[var(--brand-primary)]">{c.user_name}</span>{" "}
+          <span className="text-[var(--text-secondary)]">{c.body}</span>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a comment…" className="input-clean text-sm" onKeyDown={(e) => e.key === "Enter" && submit()} data-testid={`comment-input-${postId}`} />
+        <button onClick={submit} className="btn-primary text-sm" data-testid={`comment-submit-${postId}`}>Send</button>
+      </div>
+    </div>
+  );
+}
 
 export default function MyParish() {
   const [memberships, setMemberships] = useState([]);
@@ -10,6 +34,7 @@ export default function MyParish() {
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [openComments, setOpenComments] = useState({});
 
   useEffect(() => {
     http.get("/me/memberships").then((r) => {
@@ -34,6 +59,9 @@ export default function MyParish() {
 
   const react = async (pid) => {
     try { await http.post(`/posts/${pid}/react`, { reaction: "amen" }); setPosts(posts.map((p) => p.id === pid ? { ...p, reactions: { ...(p.reactions || {}), amen: ((p.reactions?.amen) || 0) + 1 } } : p)); } catch {}
+  };
+  const report = async (id) => {
+    try { await http.post("/reports", { target_type: "post", target_id: id, reason: "Inappropriate Content" }); toast.success("Reported."); } catch (e) { toast.error(formatErr(e)); }
   };
 
   if (memberships.length === 0) {
@@ -68,13 +96,17 @@ export default function MyParish() {
             <div key={p.id} className="card-surface p-5" data-testid={`feed-post-${p.id}`}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-9 h-9 rounded-full bg-[var(--brand-secondary)] text-white grid place-items-center text-sm">{(p.user_name || "U").slice(0, 1)}</div>
-                <div className="leading-tight"><div className="text-sm font-medium text-[var(--brand-primary)]">{p.user_name}</div><div className="text-xs text-[var(--text-tertiary)]">{p.user_rank} • {new Date(p.created_at).toLocaleString()}</div></div>
+                <div className="leading-tight flex-1"><div className="text-sm font-medium text-[var(--brand-primary)]">{p.user_name}</div><div className="text-xs text-[var(--text-tertiary)]">{p.user_rank} • {new Date(p.created_at).toLocaleString()}</div></div>
+                <button onClick={() => report(p.id)} className="text-xs text-[var(--text-tertiary)] hover:text-red-700" title="Report" data-testid={`pfeed-report-${p.id}`}><Flag size={14} /></button>
               </div>
               <div className="text-[var(--text-primary)] whitespace-pre-wrap">{p.body}</div>
               <div className="flex items-center gap-4 mt-3 text-xs text-[var(--text-tertiary)]">
                 <button onClick={() => react(p.id)} className="inline-flex items-center gap-1 hover:text-[var(--brand-accent)]" data-testid={`react-${p.id}`}><Heart size={14} /> {p.reactions?.amen || 0} Amen</button>
-                <span className="inline-flex items-center gap-1"><MessageCircle size={14} /> {p.comment_count || 0}</span>
+                <button onClick={() => setOpenComments({ ...openComments, [p.id]: !openComments[p.id] })} className="inline-flex items-center gap-1 hover:text-[var(--brand-primary)]" data-testid={`pcomments-toggle-${p.id}`}>
+                  <MessageCircle size={14} /> {p.comment_count || 0} <ChevronDown size={12} className={openComments[p.id] ? "rotate-180 transition-transform" : "transition-transform"} />
+                </button>
               </div>
+              {openComments[p.id] && <CommentSection postId={p.id} />}
             </div>
           ))}
       </div>

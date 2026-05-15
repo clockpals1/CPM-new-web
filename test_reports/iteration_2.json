@@ -1,0 +1,70 @@
+{
+  "summary": "Comprehensive backend API testing for CelestialPeopleMeeet. 58/58 tests passing after fixing one critical 500-error bug in /api/auth/register. All requested flows covered: auth, settings, parishes, memberships (2-max), feeds, prayers, testimonies, events, choir (verify+max-2-directors), service, members/follow, messages, jobs, notifications, admin (users/role/badge/reports/audit-logs), home stats. No _id leaks in any response. Role enforcement verified across all admin endpoints.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/auth/register",
+        "issue": "[FIXED by testing agent] Returned 500 on every register. After `await db.users.insert_one(doc)` motor mutates the dict in-place adding `_id` (ObjectId), then the function returned `doc` causing FastAPI serialization to fail with 'ObjectId is not iterable'. Fix: pop `_id` from doc immediately after insert (same pattern as /auth/login). One-line change applied at /app/backend/server.py:276.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "Multiple POST endpoints",
+        "issue": "Similar latent _id-leak risk exists in handlers that call `insert_one(doc)` and return `doc`. Currently safe because most endpoints pop `_id` before returning, but pattern is inconsistent. Consider centralizing this (e.g., a helper `await insert(coll, doc)` that returns clean doc) to prevent regressions like the /auth/register one."
+      },
+      {
+        "endpoint": "/auth/refresh",
+        "issue": "Refresh works even with expired tokens (verify_exp=False intentionally). Acceptable for MVP but means a stolen token can be refreshed indefinitely until expiry of cookie. Consider rotating with a refresh-token strategy."
+      },
+      {
+        "endpoint": "/api/auth/logout",
+        "issue": "Endpoint does not require authentication. Harmless but inconsistent — anonymous callers always get 200."
+      },
+      {
+        "endpoint": "/api/choir/join",
+        "issue": "On re-join, returns the existing doc as-is. Now correctly excludes _id (verified) but the doc still contains internal fields like `note` which is fine. No bug — flagged as informational."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Review /app/backend/server.py register() fix (line ~276 `doc.pop('_id', None)`) and consider extending the pattern app-wide via a tiny helper to prevent recurrence.",
+    "Optional hardening: require auth on /api/auth/logout, rotate refresh tokens, and consider rate-limiting login (no brute-force lockout currently)."
+  ],
+  "critical_code_review_comments": [
+    "Single-file server.py is 1229 lines — split into routers (auth, parishes, feed, admin, etc.) for maintainability.",
+    "register() previously returned an in-place mutated mongo doc — root cause of 500. Always sanitize before returning. Same pattern appears in many endpoints; one-line `doc.pop('_id', None)` is repeated 15+ times — extract helper.",
+    "set_auth_cookie uses samesite='none' + secure=True which is fine for HTTPS preview but will not work over plain HTTP (e.g., local dev without TLS). Bearer fallback mitigates this.",
+    "No rate limiting / brute force protection on /auth/login. Test creds note mentions lockout after 5 fails but implementation does not enforce it.",
+    "No password complexity beyond `min_length=6` in RegisterReq.",
+    "/auth/refresh accepts expired tokens (verify_exp=False); refresh+access tokens are the same shape — consider separate token types.",
+    "Multiple endpoints take `body: dict` (e.g., /admin/users/{uid}, /admin/users/{uid}/badge, /reports, /posts/{pid}/react) bypassing Pydantic validation. Replace with typed models.",
+    "Settings POST creates entries even if duplicate label exists for same key (no uniqueness check beyond seeder).",
+    "Member auto-seed approves to parishes[0] every boot — _ensure_user does not update existing extra fields (only password/role) which is correct, but member auto-join logic depends on parish_ids list order from SAMPLE_PARISHES which could shift if parishes are renamed.",
+    "CORS allow_origin_regex='.*' with allow_credentials=True is permissive — acceptable for MVP/preview but should be tightened with explicit origins for production."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (register endpoint: added `doc.pop('_id', None)` after insert_one to fix 500)",
+    "/app/backend/tests/backend_test.py (new comprehensive pytest suite, 58 tests)",
+    "/app/backend/tests/__init__.py"
+  ],
+  "success_rate": {
+    "backend": "100% (58/58)",
+    "frontend": "N/A (frontend testing skipped per request)"
+  },
+  "test_credentials": "super: superadmin@celestialpeoplemeeet.com / Celestial@2026, parish_admin: parishadmin@celestialpeoplemeeet.com / Parish@2026, member: member@celestialpeoplemeeet.com / Member@2026",
+  "seed_data_creation": "Multiple TEST_ prefixed users/parishes/posts/etc created by parametrized tests. These are leftover in MongoDB by design (no cleanup) — easy to identify by TEST_ prefix / @example.com domain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend has comprehensive pytest suite at /app/backend/tests/backend_test.py covering 58 cases (all flows in review_request). Run: `python -m pytest /app/backend/tests/backend_test.py -v`. The previously-reported /api/choir/join _id issue was already fixed. A NEW critical 500 in /api/auth/register was discovered and fixed (line ~276). Member seed is auto-approved to parishes[0]; some tests intentionally rely on this. Choir test uses fresh user to avoid persisted-state flakiness.",
+  "rca of the issue": "POST /api/auth/register threw 500 because motor's `insert_one(doc)` mutates the input dict to attach an ObjectId `_id` field. The endpoint then returned `doc` directly, and FastAPI's JSON encoder cannot serialize ObjectId, raising 'ObjectId is not iterable'. Reproduction: any register call. Fix: `doc.pop('_id', None)` after insert. The same pattern is repeated in 15+ endpoints in server.py — register() was the only one that missed it. Strongly recommend extracting an `insert_and_clean()` helper."
+}
