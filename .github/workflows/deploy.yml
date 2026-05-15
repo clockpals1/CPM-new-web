@@ -33,8 +33,15 @@ jobs:
           REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
           CI: ''        # prevent ESLint warnings from aborting the build
 
+      - name: Create Cloudflare Pages project (if not exists)
+        working-directory: frontend
+        run: npx wrangler pages project create cpm --production-branch main || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy build --project-name cpm --branch main
+        run: npx wrangler pages deploy build --project-name cpm --branch main --commit-dirty=true
         working-directory: frontend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
