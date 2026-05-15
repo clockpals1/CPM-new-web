@@ -1,0 +1,128 @@
+{
+  "theme": "LIGHT",
+  "archetype": "1 (Organic & Earthy) mixed with 4 (Swiss & High-Contrast) - 'Sacred & Structured'",
+  "colors": {
+    "background": {
+      "default": "#FDFBF7",
+      "paper": "#FAF9F6",
+      "surface": "#FFFFFF",
+      "subtle": "#F3EFE9"
+    },
+    "brand": {
+      "primary": "#0F1E38",
+      "primary_hover": "#1A2A44",
+      "secondary": "#2A456C",
+      "accent": "#C5A028",
+      "accent_hover": "#D4AF37"
+    },
+    "text": {
+      "primary": "#0A1121",
+      "secondary": "#4B5563",
+      "tertiary": "#6B7280",
+      "inverse": "#FFFFFF"
+    },
+    "border": {
+      "default": "#E5E1D8",
+      "focus": "#C5A028"
+    },
+    "status": {
+      "success": "#166534",
+      "warning": "#9A3412",
+      "error": "#991B1B",
+      "info": "#1E3A8A"
+    }
+  },
+  "typography": {
+    "font_family": {
+      "heading": "'Cormorant Garamond', serif",
+      "body": "'Manrope', sans-serif",
+      "mono": "'IBM Plex Mono', monospace"
+    },
+    "sizes": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-none",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
+      "h3": "text-xl sm:text-2xl tracking-tight",
+      "h4": "text-lg sm:text-xl",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm",
+      "overline": "text-xs uppercase tracking-[0.2em] font-semibold"
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "Microsoft 365 Enterprise Structure mixed with Organic spacing",
+    "spacing_scale": "Tailwind defaults (p-4, p-6, p-8, p-12)",
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "grid": {
+      "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "forms": "grid-cols-1 gap-8"
+    },
+    "surfaces": {
+      "card": "bg-white border border-[#E5E1D8] shadow-sm rounded-lg",
+      "glass": "backdrop-blur-xl bg-white/70 border border-[#E5E1D8]/50 shadow-sm"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#0F1E38] text-white hover:bg-[#1A2A44] transition-colors rounded-md px-6 py-2.5 font-medium shadow-sm",
+      "accent": "bg-[#C5A028] text-white hover:bg-[#D4AF37] transition-colors rounded-md px-6 py-2.5 font-medium shadow-sm",
+      "outline": "border border-[#0F1E38] text-[#0F1E38] hover:bg-[#F3EFE9] rounded-md px-6 py-2.5 font-medium transition-colors"
+    },
+    "inputs": {
+      "default": "bg-white border border-[#E5E1D8] rounded-md px-4 py-2.5 focus:border-[#C5A028] focus:ring-1 focus:ring-[#C5A028] outline-none transition-all"
+    },
+    "navigation": {
+      "sidebar": "fixed left-0 top-0 h-full w-64 bg-[#FDFBF7] border-r border-[#E5E1D8]",
+      "topbar": "sticky top-0 z-50 w-full backdrop-blur-xl bg-white/80 border-b border-[#E5E1D8]"
+    },
+    "onboarding": {
+      "style": "conversational",
+      "container": "max-w-xl mx-auto mt-20 p-8 bg-white border border-[#E5E1D8] rounded-xl shadow-sm",
+      "transitions": "framer-motion AnimatePresence for smooth step transitions (fade in/out, slight slide up)"
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "stroke_width": "1.5",
+    "style": "clean, unembellished"
+  },
+  "motion": {
+    "transitions": "transition-all duration-200 ease-in-out",
+    "hover": "hover:-translate-y-0.5 hover:shadow-md",
+    "page_load": "fade-in, slide-up by 10px duration-500"
+  },
+  "accessibility": {
+    "contrast": "WCAG AA compliant minimum 4.5:1 for normal text",
+    "focus": "focus-visible:ring-2 focus-visible:ring-[#C5A028] focus-visible:outline-none",
+    "testing_attributes": "Add data-testid to all interactive elements (e.g., data-testid='submit-prayer-btn')"
+  },
+  "image_urls": {
+    "choir": [
+      {
+        "url": "https://images.unsplash.com/photo-1720186576697-24c1496a07e1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxkaXZlcnNlJTIwY2h1cmNoJTIwY2hvaXIlMjBzaW5naW5nfGVufDB8fHx8MTc3ODg3NDI3M3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Church choir singing in front of altar",
+        "category": "choir_feature"
+      }
+    ],
+    "community": [
+      {
+        "url": "https://images.unsplash.com/photo-1609234656388-0ff363383899?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwyfHxkaXZlcnNlJTIwcGVvcGxlJTIwcHJheWluZyUyMHRvZ2V0aGVyJTIwY29tbXVuaXR5fGVufDB8fHx8MTc3ODg3NDI3M3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Diverse community standing and praying",
+        "category": "prayer_wall_hero"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1543702404-38c2035462ad?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwxfHxkaXZlcnNlJTIwcGVvcGxlJTIwcHJheWluZyUyMHRvZ2V0aGVyJTIwY29tbXVuaXR5fGVufDB8fHx8MTc3ODg3NDI3M3ww&ixlib=rb-4.1.0&q=85",
+        "description": "People praying inside a room",
+        "category": "community_gathering"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use a Light theme. The app is 'CelestialPeopleMeeet'. It must look like a high-end enterprise app (M365) but feel reverent.",
+    "Implement conversational onboarding (one question per step using Framer Motion). Do not use a standard static signup form.",
+    "Use 'Cormorant Garamond' for headings to bring the church feel, and 'Manrope' for body copy for legibility. Add them to Google Fonts.",
+    "Primary colors are Ivory (#FDFBF7 background), Navy Blue (#0F1E38 primary text/buttons), and Gold (#C5A028 accents). DO NOT use purple.",
+    "UI components should use Shadcn but stripped of the Vercel look: use 1px borders, subtle colors, and zero overbearing box-shadows.",
+    "The layout must have a sticky topbar and, on desktop, a left sidebar for the heavy navigation structure.",
+    "All interactive elements MUST have descriptive data-testid attributes."
+  ]
+}
