@@ -9,12 +9,12 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://parish-connect-test.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
 API = f"{BASE_URL}/api"
 
-SUPER = ("superadmin@celestialpeoplemeeet.com", "Celestial@2026")
-PADMIN = ("parishadmin@celestialpeoplemeeet.com", "Parish@2026")
-MEMBER = ("member@celestialpeoplemeeet.com", "Member@2026")
+SUPER = ("superadmin@celestialpeoplemeet.com", "Celestial@2026")
+PADMIN = ("parishadmin@celestialpeoplemeet.com", "Parish@2026")
+MEMBER = ("member@celestialpeoplemeet.com", "Member@2026")
 
 
 # ---------- helpers ----------

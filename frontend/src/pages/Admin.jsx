@@ -241,13 +241,13 @@ function IntegrationsManager() {
   const [items, setItems] = useState([]);
   const FIELDS = [
     { label: "resend_api_key", title: "Resend API key", desc: "Used for password reset emails and notifications.", secret: true, placeholder: "re_xxx" },
-    { label: "resend_from_email", title: "Resend 'From' email", desc: "Verified sender, e.g. CelestialPeopleMeeet <noreply@celestialpeoplemeeet.com>", secret: false, placeholder: "noreply@celestialpeoplemeeet.com" },
+    { label: "resend_from_email", title: "Resend 'From' email", desc: "Verified sender, e.g. CelestialPeopleMeeet <noreply@celestialpeoplemeet.com>", secret: false, placeholder: "noreply@celestialpeoplemeet.com" },
     { label: "google_maps_api_key_public", title: "Google Maps JS API key (public)", desc: "Used by the parish detail map.", secret: false, placeholder: "AIza…" },
     { label: "cloudflare_r2_account_id", title: "Cloudflare R2 account ID", desc: "From your Cloudflare dashboard.", secret: false },
     { label: "cloudflare_r2_access_key_id", title: "Cloudflare R2 access key ID", desc: "", secret: true },
     { label: "cloudflare_r2_secret_access_key", title: "Cloudflare R2 secret", desc: "", secret: true },
     { label: "cloudflare_r2_bucket", title: "Cloudflare R2 bucket name", desc: "", secret: false, placeholder: "celestial-media" },
-    { label: "cloudflare_r2_public_url", title: "R2 public base URL", desc: "Custom domain or pub-...r2.dev URL", secret: false, placeholder: "https://media.celestialpeoplemeeet.com" },
+    { label: "cloudflare_r2_public_url", title: "R2 public base URL", desc: "Custom domain or pub-...r2.dev URL", secret: false, placeholder: "https://media.celestialpeoplemeet.com" },
     { label: "vapid_public_key", title: "VAPID public key (auto-generated)", desc: "Click Generate VAPID below if empty.", secret: false, readonly: true },
   ];
   const load = () => http.get("/integrations").then((r) => setItems(r.data));

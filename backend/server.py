@@ -1171,7 +1171,7 @@ async def test_integration(provider: str, body: dict, actor: dict = Depends(requ
 
 async def _send_email(to: str, subject: str, html: str) -> tuple[bool, str]:
     api_key = await get_config("resend_api_key")
-    from_addr = await get_config("resend_from_email") or "CelestialPeopleMeeet <noreply@celestialpeoplemeeet.com>"
+    from_addr = await get_config("resend_from_email") or "CelestialPeopleMeeet <noreply@celestialpeoplemeet.com>"
     if not api_key:
         log.info("[email-fallback] to=%s subject=%s body=%s", to, subject, html[:300])
         return True, "logged (no Resend API key configured)"
@@ -1403,7 +1403,7 @@ async def _send_push(user_id: str, title: str, body: str, url: str = "/") -> int
     subs = await db.push_subscriptions.find({"user_id": user_id}, {"_id": 0}).to_list(50)
     sent = 0
     payload = jsonlib.dumps({"title": title, "body": body, "url": url})
-    claims = {"sub": "mailto:noreply@celestialpeoplemeeet.com"}
+    claims = {"sub": "mailto:noreply@celestialpeoplemeet.com"}
     for s in subs:
         try:
             webpush(subscription_info=s["subscription"], data=payload, vapid_private_key=priv_pem, vapid_claims=claims)
@@ -1588,8 +1588,8 @@ async def on_startup():
     admin_name = os.environ.get("ADMIN_NAME", "Super Admin")
     await _ensure_user(admin_email, admin_password, admin_name, "super_admin", ccc_rank="Senior Shepherd", country="Nigeria", city="Lagos", summary="Platform administrator.")
 
-    pa_id = await _ensure_user("parishadmin@celestialpeoplemeeet.com", "Parish@2026", "Adekunle Bamidele", "parish_admin", ccc_rank="Shepherd", country="Nigeria", city="Lagos", summary="Shepherd in charge of Bethel Parish, Lagos.")
-    member_id = await _ensure_user("member@celestialpeoplemeeet.com", "Member@2026", "Joy Adewale", "member", ccc_rank="Sister", country="Nigeria", city="Lagos", choir=True, summary="Choir soprano. Loves prayer and worship.")
+    pa_id = await _ensure_user("parishadmin@celestialpeoplemeet.com", "Parish@2026", "Adekunle Bamidele", "parish_admin", ccc_rank="Shepherd", country="Nigeria", city="Lagos", summary="Shepherd in charge of Bethel Parish, Lagos.")
+    member_id = await _ensure_user("member@celestialpeoplemeet.com", "Member@2026", "Joy Adewale", "member", ccc_rank="Sister", country="Nigeria", city="Lagos", choir=True, summary="Choir soprano. Loves prayer and worship.")
 
     # ensure member auto-joined to a parish for nice demo
     if parish_ids:
@@ -1617,7 +1617,7 @@ async def on_shutdown():
 app.include_router(api)
 
 # CORS configuration — explicit production origins + preview + localhost
-CORS_DEFAULT = "https://celestialpeoplemeeet.com,https://www.celestialpeoplemeeet.com,https://3b978f91-ae08-4645-8ab8-6873e3146af0.preview.emergentagent.com,http://localhost:3000"
+CORS_DEFAULT = "https://celestialpeoplemeet.com,https://www.celestialpeoplemeet.com,http://localhost:3000"
 _cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", CORS_DEFAULT).split(",") if o.strip()]
 _wildcard = "*" in _cors_origins
 if _wildcard:

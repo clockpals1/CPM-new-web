@@ -26,8 +26,8 @@ API = f"{BASE_URL}/api"
 WS_BASE = BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
 
 SUPER = ("sunday@isunday.me", "Gpiner0@12")
-PADMIN = ("parishadmin@celestialpeoplemeeet.com", "Parish@2026")
-MEMBER = ("member@celestialpeoplemeeet.com", "Member@2026")
+PADMIN = ("parishadmin@celestialpeoplemeet.com", "Parish@2026")
+MEMBER = ("member@celestialpeoplemeet.com", "Member@2026")
 
 
 def login(email, password):
@@ -544,7 +544,7 @@ LOCAL = "http://localhost:8001"
 
 class TestCORS:
     def test_cors_allowed_origin(self):
-        origin = "https://celestialpeoplemeeet.com"
+        origin = "https://celestialpeoplemeet.com"
         r = requests.get(
             f"{LOCAL}/api/health",
             headers={"Origin": origin},
