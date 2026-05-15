@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  # ── Frontend → Cloudflare Pages ──────────────────────────────────────────
+  frontend:
+    name: Frontend → Cloudflare Pages
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        working-directory: frontend
+        run: yarn build
+        env:
+          REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
+          CI: ''        # prevent ESLint warnings from aborting the build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: ${{ vars.CF_PAGES_PROJECT_NAME }}
+          directory: frontend/build
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+  # ── Backend → Render ─────────────────────────────────────────────────────
+  backend:
+    name: Backend → Render
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render deploy hook
+        run: |
+          if [ -n "$HOOK" ]; then
+            curl -fsSL -X POST "$HOOK"
+            echo "Render deploy triggered."
+          else
+            echo "RENDER_DEPLOY_HOOK_URL not set — Render will auto-deploy from its own GitHub integration."
+          fi
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
