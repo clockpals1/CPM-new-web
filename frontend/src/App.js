@@ -1,53 +1,81 @@
-import { useEffect } from "react";
+import React from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import Landing from "./pages/Landing";
+import ConversationalAuth from "./pages/ConversationalAuth";
+import AppLayout from "./components/AppLayout";
+import Home from "./pages/Home";
+import Parishes from "./pages/Parishes";
+import ParishDetail from "./pages/ParishDetail";
+import MyParish from "./pages/MyParish";
+import PrayerWall from "./pages/PrayerWall";
+import Events from "./pages/Events";
+import Choir from "./pages/Choir";
+import Service from "./pages/Service";
+import MeetPeople from "./pages/MeetPeople";
+import Careers from "./pages/Careers";
+import Messages from "./pages/Messages";
+import Notifications from "./pages/Notifications";
+import Admin from "./pages/Admin";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
+function Loader() {
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
+    <div className="min-h-screen grid place-items-center bg-[var(--bg-default)]">
+      <div className="font-display text-2xl text-[var(--brand-primary)]">Preparing your space…</div>
     </div>
   );
-};
+}
+
+function Protected({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <Loader />;
+  if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
+  return children;
+}
+
+function AdminGate({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Loader />;
+  if (!user) return <Navigate to="/auth" replace />;
+  if (user.role !== "super_admin" && user.role !== "parish_admin") return <Navigate to="/app" replace />;
+  return children;
+}
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
+        <Toaster richColors position="top-right" />
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
+          <Route path="/" element={<Landing />} />
+          <Route path="/auth" element={<ConversationalAuth />} />
+          <Route
+            path="/app"
+            element={
+              <Protected>
+                <AppLayout><Home /></AppLayout>
+              </Protected>
+            }
+          />
+          <Route path="/app/parishes" element={<Protected><AppLayout><Parishes /></AppLayout></Protected>} />
+          <Route path="/app/parishes/:id" element={<Protected><AppLayout><ParishDetail /></AppLayout></Protected>} />
+          <Route path="/app/my-parish" element={<Protected><AppLayout><MyParish /></AppLayout></Protected>} />
+          <Route path="/app/prayer" element={<Protected><AppLayout><PrayerWall /></AppLayout></Protected>} />
+          <Route path="/app/events" element={<Protected><AppLayout><Events /></AppLayout></Protected>} />
+          <Route path="/app/choir" element={<Protected><AppLayout><Choir /></AppLayout></Protected>} />
+          <Route path="/app/service" element={<Protected><AppLayout><Service /></AppLayout></Protected>} />
+          <Route path="/app/meet" element={<Protected><AppLayout><MeetPeople /></AppLayout></Protected>} />
+          <Route path="/app/careers" element={<Protected><AppLayout><Careers /></AppLayout></Protected>} />
+          <Route path="/app/messages" element={<Protected><AppLayout><Messages /></AppLayout></Protected>} />
+          <Route path="/app/notifications" element={<Protected><AppLayout><Notifications /></AppLayout></Protected>} />
+          <Route path="/app/admin" element={<AdminGate><AppLayout><Admin /></AppLayout></AdminGate>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 

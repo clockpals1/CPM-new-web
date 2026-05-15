@@ -1,34 +1,43 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
+/* App-specific styles for CelestialPeopleMeeet */
+.App { min-height: 100vh; }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
+.btn-primary {
+    background: var(--brand-primary);
     color: white;
+    border-radius: 8px;
+    padding: 10px 22px;
+    font-weight: 500;
+    transition: background 200ms ease, transform 200ms ease;
+}
+.btn-primary:hover { background: var(--brand-primary-hover); transform: translateY(-1px); }
+
+.btn-accent {
+    background: var(--brand-accent);
+    color: white;
+    border-radius: 8px;
+    padding: 10px 22px;
+    font-weight: 500;
+    transition: background 200ms ease, transform 200ms ease;
+}
+.btn-accent:hover { background: var(--brand-accent-hover); }
+
+.card-surface {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15,30,56,0.04);
 }
 
-.App-link {
-    color: #61dafb;
-}
+.divider { height: 1px; background: var(--border-default); }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.input-clean {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    padding: 12px 14px;
+    width: 100%;
+    outline: none;
+    font: inherit;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
 }
+.input-clean:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(197,160,40,0.18); }
