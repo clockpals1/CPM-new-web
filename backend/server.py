@@ -617,12 +617,81 @@ async def join_parish(pid: str, body: dict = {}, user: dict = Depends(get_curren
 @api.get("/me/memberships")
 async def my_memberships(user: dict = Depends(get_current_user)):
     items = await db.parish_memberships.find({"user_id": user["id"], "status": "approved"}, {"_id": 0}).to_list(10)
-    # join parish info
     out = []
     for m in items:
         p = await db.parishes.find_one({"id": m["parish_id"]}, {"_id": 0})
         out.append({**m, "parish": p})
     return out
+
+
+@api.get("/me/parish-dashboard")
+async def my_parish_dashboard(user: dict = Depends(get_current_user)):
+    """Single enriched call: approved + pending memberships, per-parish stats, next event, recent activity."""
+    max_m = int(await get_config("max_parish_memberships") or "2")
+    now_str = iso(now_utc())
+
+    # Approved memberships
+    approved = await db.parish_memberships.find(
+        {"user_id": user["id"], "status": "approved"}, {"_id": 0}
+    ).to_list(10)
+
+    enriched = []
+    for m in approved:
+        pid = m["parish_id"]
+        parish = await db.parishes.find_one({"id": pid}, {"_id": 0})
+        if not parish:
+            continue
+        member_count = await db.parish_memberships.count_documents({"parish_id": pid, "status": "approved"})
+        # next upcoming event for this parish
+        next_event = await db.events.find_one(
+            {"parish_id": pid, "starts_at": {"$gte": now_str}},
+            {"_id": 0},
+            sort=[("starts_at", 1)]
+        )
+        # recent post count (last 7 days)
+        week_ago = iso(now_utc() - __import__("datetime").timedelta(days=7))
+        recent_posts = await db.feed_posts.count_documents(
+            {"parish_id": pid, "scope": "parish", "created_at": {"$gte": week_ago}}
+        )
+        recent_prayers = await db.prayer_requests.count_documents(
+            {"parish_id": pid, "scope": "parish", "created_at": {"$gte": week_ago}}
+        )
+        enriched.append({
+            **m,
+            "parish": parish,
+            "member_count": member_count,
+            "next_event": next_event,
+            "recent_posts": recent_posts,
+            "recent_prayers": recent_prayers,
+        })
+
+    # Pending memberships
+    pending = await db.parish_memberships.find(
+        {"user_id": user["id"], "status": "pending"}, {"_id": 0}
+    ).to_list(10)
+    pending_enriched = []
+    for m in pending:
+        parish = await db.parishes.find_one({"id": m["parish_id"]}, {"_id": 0})
+        pending_enriched.append({**m, "parish": parish})
+
+    return {
+        "memberships": enriched,
+        "pending": pending_enriched,
+        "max_memberships": max_m,
+        "active_parish_id": user.get("active_parish_id", ""),
+    }
+
+
+@api.post("/me/active-parish")
+async def set_active_parish(body: dict, user: dict = Depends(get_current_user)):
+    """Persist the user's active parish context preference."""
+    parish_id = (body or {}).get("parish_id", "")
+    if parish_id:
+        m = await db.parish_memberships.find_one({"user_id": user["id"], "parish_id": parish_id, "status": "approved"})
+        if not m:
+            raise HTTPException(403, "Not an approved member of this parish")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"active_parish_id": parish_id}})
+    return {"ok": True, "active_parish_id": parish_id}
 
 
 @api.post("/memberships/request")
