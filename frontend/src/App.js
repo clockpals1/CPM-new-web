@@ -22,6 +22,7 @@ import Admin from "./pages/Admin";
 import Testimonies from "./pages/Testimonies";
 import Profile from "./pages/Profile";
 import GlobalFeed from "./pages/GlobalFeed";
+import ParishFeed from "./pages/ParishFeed";
 import { ForgotPassword, ResetPassword } from "./pages/PasswordReset";
 import { ensureServiceWorker } from "./lib/push";
 
@@ -71,6 +72,7 @@ function App() {
           <Route path="/app/parishes" element={<Protected><AppLayout><Parishes /></AppLayout></Protected>} />
           <Route path="/app/parishes/:id" element={<Protected><AppLayout><ParishDetail /></AppLayout></Protected>} />
           <Route path="/app/my-parish" element={<Protected><AppLayout><MyParish /></AppLayout></Protected>} />
+          <Route path="/app/parish-feed" element={<Protected><AppLayout><ParishFeed /></AppLayout></Protected>} />
           <Route path="/app/prayer" element={<Protected><AppLayout><PrayerWall /></AppLayout></Protected>} />
           <Route path="/app/events" element={<Protected><AppLayout><Events /></AppLayout></Protected>} />
           <Route path="/app/choir" element={<Protected><AppLayout><Choir /></AppLayout></Protected>} />

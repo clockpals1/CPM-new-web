@@ -3,9 +3,9 @@ import { http, formatErr } from "../lib/api";
 import { Link } from "react-router-dom";
 import {
   Church, MapPin, Phone, Clock, Users, Calendar, Music, BookOpen,
-  MessageSquare, Navigation, Loader2, Info, Heart, Send, Flag,
-  MessageCircle, ChevronDown, Globe, Video, Star, CheckCircle2,
-  ArrowRight, AlertCircle, ExternalLink, ChevronRight, RefreshCw,
+  MessageSquare, Navigation, Info, Heart, Send,
+  ChevronRight, Globe, Video, Star, CheckCircle2,
+  ArrowRight, AlertCircle, ExternalLink, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
@@ -15,7 +15,7 @@ let HandHeart;
 try { HandHeart = require("lucide-react").HeartHandshake || require("lucide-react").Heart; } catch { HandHeart = Heart; }
 
 const QUICK_ACTIONS = [
-  { id: "feed",        label: "Parish Feed",   icon: MessageSquare, kind: "anchor"   },
+  { id: "feed",        label: "Parish Feed",   icon: MessageSquare, kind: "internal", path: "/app/parish-feed" },
   { id: "prayer",      label: "Prayer Wall",   icon: HandHeart,     kind: "internal", path: "/app/prayer" },
   { id: "events",      label: "Events",        icon: Calendar,      kind: "internal", path: "/app/events" },
   { id: "choir",       label: "Choir",         icon: Music,         kind: "internal", path: "/app/choir",       enabledField: "choir_enabled" },
@@ -183,7 +183,7 @@ function HighlightsRow({ membership }) {
 
 // ─── Quick actions grid ───────────────────────────────────────────────────────
 function QuickActionsGrid({ parish, parishId }) {
-  const scrollToFeed = () => document.getElementById("parish-feed-section")?.scrollIntoView({ behavior: "smooth" });
+  const scrollToFeed = () => {};
   return (
     <div data-testid="quick-actions-grid">
       <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)] font-semibold mb-3">Quick access</div>
@@ -209,7 +209,7 @@ function QuickActionsGrid({ parish, parishId }) {
             </>
           );
           if (!enabled) return <div key={action.id} className={cls}>{inner}</div>;
-          if (action.kind === "anchor") return <button key={action.id} onClick={scrollToFeed} className={cls} data-testid={`qa-${action.id}`}>{inner}</button>;
+          if (action.kind === "anchor") return <button key={action.id} onClick={() => {}} className={cls} data-testid={`qa-${action.id}`}>{inner}</button>;
           if (external) return <a key={action.id} href={href} target="_blank" rel="noreferrer" className={cls} data-testid={`qa-${action.id}`}>{inner}</a>;
           return <Link key={action.id} to={href} className={cls} data-testid={`qa-${action.id}`}>{inner}</Link>;
         })}
@@ -242,83 +242,50 @@ function CommentSection({ postId }) {
   );
 }
 
-// ─── Parish feed section ──────────────────────────────────────────────────────
-function ParishFeedSection({ parishId }) {
+// ─── Parish feed preview (3 recent posts + CTA) ───────────────────────────────
+function ParishFeedPreview({ parishId }) {
   const [posts, setPosts] = useState([]);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [openComments, setOpenComments] = useState({});
-  const [loadingPosts, setLoadingPosts] = useState(false);
-
-  const loadPosts = useCallback(() => {
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
     if (!parishId) return;
-    setLoadingPosts(true);
+    setLoading(true);
     http.get("/posts", { params: { scope: "parish", parish_id: parishId } })
-      .then((r) => setPosts(r.data)).catch(() => {}).finally(() => setLoadingPosts(false));
+      .then((r) => setPosts(r.data.slice(0, 3))).catch(() => {}).finally(() => setLoading(false));
   }, [parishId]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadPosts(); }, [parishId]);
-
-  const post = async () => {
-    if (!text.trim() || !parishId) return;
-    setBusy(true);
-    try {
-      const { data } = await http.post("/posts", { body: text, scope: "parish", parish_id: parishId });
-      setPosts([data, ...posts]); setText("");
-    } catch (e) { toast.error(formatErr(e)); } finally { setBusy(false); }
-  };
-  const react = async (pid) => {
-    try { await http.post(`/posts/${pid}/react`, { reaction: "amen" }); setPosts(posts.map((p) => p.id === pid ? { ...p, reactions: { ...(p.reactions || {}), amen: ((p.reactions?.amen) || 0) + 1 } } : p)); } catch {}
-  };
-  const report = async (id) => {
-    try { await http.post("/reports", { target_type: "post", target_id: id, reason: "Inappropriate Content" }); toast.success("Reported."); } catch (e) { toast.error(formatErr(e)); }
-  };
 
   return (
-    <div id="parish-feed-section" data-testid="parish-feed-section" className="space-y-3">
-      <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)] font-semibold">Parish Feed</div>
-      <div className="card-surface p-4">
-        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Share with your parish… Alleluia!" className="input-clean min-h-[72px] w-full text-sm" data-testid="post-input" />
-        <div className="flex justify-end mt-3">
-          <button onClick={post} disabled={busy || !text.trim()} className="btn-primary text-sm inline-flex items-center gap-2" data-testid="post-submit">
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Post
-          </button>
-        </div>
+    <div className="space-y-3" data-testid="parish-feed-preview">
+      <div className="flex items-center justify-between">
+        <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)] font-semibold">Recent Activity</div>
+        <Link to="/app/parish-feed" className="text-xs text-[var(--brand-accent)] hover:underline inline-flex items-center gap-1" data-testid="view-full-feed">
+          View Full Feed <ChevronRight size={12} />
+        </Link>
       </div>
-      {loadingPosts && (
-        <div className="card-surface p-5 animate-pulse space-y-3">
-          <div className="flex gap-3"><div className="w-9 h-9 rounded-full bg-[var(--bg-subtle)]" /><div className="flex-1 space-y-2"><div className="h-3 bg-[var(--bg-subtle)] rounded w-1/3" /><div className="h-3 bg-[var(--bg-subtle)] rounded w-1/2" /></div></div>
-          <div className="h-3 bg-[var(--bg-subtle)] rounded w-full" />
-        </div>
-      )}
-      {!loadingPosts && posts.length === 0 && (
-        <div className="card-surface p-7 text-center text-sm text-[var(--text-secondary)] space-y-2" data-testid="feed-empty">
-          <MessageSquare size={22} className="mx-auto text-[var(--text-tertiary)]" />
-          <div>No parish posts yet. Be the first to share something with your parish.</div>
+      {loading && <div className="card-surface h-24 rounded-xl animate-pulse" />}
+      {!loading && posts.length === 0 && (
+        <div className="card-surface p-5 text-center space-y-2" data-testid="preview-empty">
+          <MessageSquare size={18} className="mx-auto text-[var(--text-tertiary)]" />
+          <div className="text-sm text-[var(--text-secondary)]">No posts yet. Be the first to share.</div>
+          <Link to="/app/parish-feed" className="btn-primary text-sm inline-flex items-center gap-2 px-5 py-2" data-testid="go-to-feed-empty"><Send size={13} /> Open Parish Feed</Link>
         </div>
       )}
       {posts.map((p) => (
-        <div key={p.id} className="card-surface p-5" data-testid={`feed-post-${p.id}`}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-[var(--brand-secondary)] text-white grid place-items-center text-sm font-medium flex-shrink-0 overflow-hidden">
-              {p.user_avatar ? <img src={p.user_avatar} alt="" className="w-full h-full object-cover" /> : (p.user_name || "U").slice(0, 1)}
-            </div>
-            <div className="leading-tight flex-1 min-w-0">
-              <div className="text-sm font-medium text-[var(--brand-primary)]">{p.user_name}</div>
-              <div className="text-xs text-[var(--text-tertiary)]">{[p.user_rank, new Date(p.created_at).toLocaleString()].filter(Boolean).join(" · ")}</div>
-            </div>
-            <button onClick={() => report(p.id)} className="text-[var(--text-tertiary)] hover:text-red-700 flex-shrink-0" title="Report" data-testid={`pfeed-report-${p.id}`}><Flag size={13} /></button>
+        <div key={p.id} className="card-surface p-4 flex items-start gap-3" data-testid={`preview-post-${p.id}`}>
+          <div className="w-8 h-8 rounded-full bg-[var(--brand-secondary)] text-white grid place-items-center text-xs font-medium flex-shrink-0 overflow-hidden">
+            {p.user_avatar ? <img src={p.user_avatar} alt="" className="w-full h-full object-cover" /> : (p.user_name || "U").slice(0, 1)}
           </div>
-          <p className="text-[var(--text-primary)] whitespace-pre-wrap text-sm leading-relaxed">{p.body}</p>
-          <div className="flex items-center gap-4 mt-3 text-xs text-[var(--text-tertiary)]">
-            <button onClick={() => react(p.id)} className="inline-flex items-center gap-1 hover:text-[var(--brand-accent)]" data-testid={`react-${p.id}`}><Heart size={13} /> {p.reactions?.amen || 0} Amen</button>
-            <button onClick={() => setOpenComments((prev) => ({ ...prev, [p.id]: !prev[p.id] }))} className="inline-flex items-center gap-1 hover:text-[var(--brand-primary)]" data-testid={`pcomments-toggle-${p.id}`}>
-              <MessageCircle size={13} /> {p.comment_count || 0} <ChevronDown size={11} className={`transition-transform ${openComments[p.id] ? "rotate-180" : ""}`} />
-            </button>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium text-[var(--brand-primary)]">{p.user_name} <span className="text-[var(--text-tertiary)] font-normal">· {new Date(p.created_at).toLocaleDateString()}</span></div>
+            <p className="text-sm text-[var(--text-secondary)] truncate mt-0.5">{p.body}</p>
           </div>
-          {openComments[p.id] && <CommentSection postId={p.id} />}
+          <div className="text-xs text-[var(--text-tertiary)] flex items-center gap-1 flex-shrink-0"><Heart size={11} /> {p.reactions?.amen || 0}</div>
         </div>
       ))}
+      {posts.length > 0 && (
+        <Link to="/app/parish-feed" className="card-surface p-3 text-center text-sm text-[var(--brand-accent)] hover:text-[var(--brand-primary)] flex items-center justify-center gap-2 transition-colors" data-testid="go-to-feed-cta">
+          <MessageSquare size={14} /> Open Parish Feed
+        </Link>
+      )}
     </div>
   );
 }
@@ -414,8 +381,8 @@ export default function MyParish() {
       {/* Quick actions */}
       {activeParish && <QuickActionsGrid parish={activeParish} parishId={activeMembership.parish_id} />}
 
-      {/* Parish feed */}
-      {activeMembership?.parish_id && <ParishFeedSection parishId={activeMembership.parish_id} key={activeMembership.parish_id} />}
+      {/* Parish feed preview → links to /app/parish-feed */}
+      {activeMembership?.parish_id && <ParishFeedPreview parishId={activeMembership.parish_id} key={activeMembership.parish_id} />}
 
       {/* Pending notice (for users with both approved and pending) */}
       {pending.length > 0 && (

@@ -183,6 +183,8 @@ class PostIn(BaseModel):
     scope: Literal["parish", "global"] = "parish"
     parish_id: Optional[str] = None
     visibility: Optional[str] = "members"  # members, announcement, leaders
+    post_type: Optional[str] = "member_post"  # member_post|announcement|worship_reminder|event_promo|testimony_preview|choir_update|service_notice|prayer_highlight
+    image_url: Optional[str] = ""
 
 
 class CommentIn(BaseModel):
@@ -790,8 +792,43 @@ async def list_posts(scope: str = "global", parish_id: Optional[str] = None, cou
         if not await _user_can_view_parish(user, parish_id):
             raise HTTPException(403, "Not a member of this parish")
         flt["parish_id"] = parish_id
-    items = await db.feed_posts.find(flt, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    # Sort: pinned posts first, then by created_at desc
+    pipeline = [
+        {"$match": flt},
+        {"$addFields": {"_pin_sort": {"$cond": [{"$eq": ["$pinned", True]}, 0, 1]}}},
+        {"$sort": {"_pin_sort": 1, "created_at": -1}},
+        {"$limit": 100},
+        {"$project": {"_id": 0, "_pin_sort": 0}},
+    ]
+    items = await db.feed_posts.aggregate(pipeline).to_list(100)
     return items
+
+
+@api.patch("/posts/{pid}")
+async def edit_post(pid: str, body: dict, user: dict = Depends(get_current_user)):
+    """Edit own post body/post_type. Admins can edit any post."""
+    p = await db.feed_posts.find_one({"id": pid})
+    if not p:
+        raise HTTPException(404, "Post not found")
+    if p["user_id"] != user["id"] and user.get("role") not in ("super_admin", "parish_admin", "moderator"):
+        raise HTTPException(403, "Cannot edit this post")
+    allowed = {k: v for k, v in body.items() if k in ("body", "post_type", "image_url")}
+    if not allowed:
+        raise HTTPException(400, "Nothing to update")
+    allowed["edited_at"] = iso(now_utc())
+    await db.feed_posts.update_one({"id": pid}, {"$set": allowed})
+    return {"ok": True}
+
+
+@api.patch("/posts/{pid}/pin")
+async def pin_post(pid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    """Pin or unpin a post. Only parish_admin and super_admin."""
+    p = await db.feed_posts.find_one({"id": pid})
+    if not p:
+        raise HTTPException(404, "Post not found")
+    pinned = bool((body or {}).get("pinned", not p.get("pinned", False)))
+    await db.feed_posts.update_one({"id": pid}, {"$set": {"pinned": pinned}})
+    return {"ok": True, "pinned": pinned}
 
 
 @api.post("/posts/{pid}/react")
@@ -834,6 +871,20 @@ async def delete_post(pid: str, user: dict = Depends(get_current_user)):
     if p["user_id"] != user["id"] and user.get("role") not in ("super_admin", "parish_admin", "moderator"):
         raise HTTPException(403, "Cannot delete")
     await db.feed_posts.delete_one({"id": pid})
+    await db.feed_comments.delete_many({"post_id": pid})
+    return {"ok": True}
+
+
+@api.delete("/posts/{pid}/comments/{cid}")
+async def delete_comment(pid: str, cid: str, user: dict = Depends(get_current_user)):
+    """Author or moderator/admin can delete a comment."""
+    c = await db.feed_comments.find_one({"id": cid, "post_id": pid})
+    if not c:
+        raise HTTPException(404, "Comment not found")
+    if c["user_id"] != user["id"] and user.get("role") not in ("super_admin", "parish_admin", "moderator"):
+        raise HTTPException(403, "Cannot delete this comment")
+    await db.feed_comments.delete_one({"id": cid})
+    await db.feed_posts.update_one({"id": pid}, {"$inc": {"comment_count": -1}})
     return {"ok": True}
 
 
