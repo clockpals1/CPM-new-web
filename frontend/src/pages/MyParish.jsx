@@ -3,7 +3,7 @@ import { http, formatErr } from "../lib/api";
 import { Link } from "react-router-dom";
 import {
   Church, MapPin, Phone, Clock, Users, Calendar, Music, BookOpen,
-  MessageSquare, Navigation, Info, Heart, Send,
+  MessageSquare, Navigation, Info, Heart, Send, Search, UserPlus,
   ChevronRight, Globe, Video, Star, CheckCircle2,
   ArrowRight, AlertCircle, ExternalLink, RefreshCw,
   CalendarClock, Megaphone, Play,
@@ -32,40 +32,48 @@ function NoParishState() {
     <div className="max-w-2xl mx-auto space-y-5" data-testid="no-parish-state">
       {/* Hero */}
       <div className="card-surface overflow-hidden">
-        <div className="h-2 bg-gradient-to-r from-[var(--brand-primary)] via-[var(--brand-accent)] to-[var(--brand-primary)]" />
-        <div className="p-8 sm:p-12 text-center space-y-4">
-          <div className="w-20 h-20 rounded-2xl bg-[var(--brand-primary)] grid place-items-center mx-auto shadow-lg">
-            <Church size={36} className="text-[var(--brand-accent)]" />
+        <div className="h-1.5 bg-gradient-to-r from-[var(--brand-primary)] via-[var(--brand-accent)] to-[var(--brand-primary)]" />
+        <div className="p-8 sm:p-12 text-center space-y-5">
+          <div className="w-24 h-24 rounded-3xl bg-[var(--brand-primary)] grid place-items-center mx-auto shadow-xl">
+            <Church size={42} className="text-[var(--brand-accent)]" />
           </div>
           <div>
-            <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-2">Welcome</div>
-            <h2 className="font-display text-3xl sm:text-4xl text-[var(--brand-primary)]">Find your parish home</h2>
-            <p className="text-sm text-[var(--text-secondary)] mt-3 max-w-md mx-auto leading-relaxed">
-              Join a Celestial Church of Christ parish near you. You’ll be welcomed as a full member instantly — no waiting, no approval needed.
+            <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-2">Your parish home awaits</div>
+            <h2 className="font-display text-3xl sm:text-4xl text-[var(--brand-primary)]">Find and join a parish</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-3 max-w-sm mx-auto leading-relaxed">
+              Search the worldwide CCC parish directory and join instantly. No approval required for open parishes.
             </p>
           </div>
-          <Link
-            to="/app/parishes"
-            className="btn-primary inline-flex items-center gap-2 px-8 py-3 text-sm mx-auto"
-            data-testid="myparish-find"
-          >
-            <Navigation size={15} /> Browse Parishes <ArrowRight size={14} />
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              to="/app/parishes"
+              className="btn-primary inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm rounded-xl"
+              data-testid="myparish-find"
+            >
+              <Navigation size={15} /> Browse Parishes <ArrowRight size={14} />
+            </Link>
+            <Link
+              to="/app/parishes"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--brand-primary)] transition-colors"
+            >
+              <MapPin size={14} /> Near me
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Steps */}
       <div className="grid sm:grid-cols-3 gap-3">
         {[
-          { num: "1", title: "Find a parish", desc: "Search by country, city, or name — worldwide." },
-          { num: "2", title: "Click Join", desc: "One tap and you're in. Membership is instant." },
-          { num: "3", title: "Connect & grow", desc: "Access the parish feed, events, prayer wall and more." },
-        ].map(({ num, title, desc }) => (
+          { num: "1", icon: Search, title: "Search a parish", desc: "Filter by country, city, or name worldwide." },
+          { num: "2", icon: UserPlus, title: "Join in one tap", desc: "Open parishes confirm your membership instantly." },
+          { num: "3", icon: MessageSquare, title: "Connect & grow", desc: "Unlock the parish feed, events, choir, and more." },
+        ].map(({ num, icon: Icon, title, desc }) => (
           <div key={num} className="card-surface p-5 flex gap-4 items-start">
-            <div className="w-8 h-8 rounded-full bg-[var(--brand-primary)] text-[var(--brand-accent)] grid place-items-center font-display text-lg flex-shrink-0">{num}</div>
+            <div className="w-9 h-9 rounded-xl bg-[var(--brand-primary)] text-[var(--brand-accent)] grid place-items-center font-display text-lg flex-shrink-0">{num}</div>
             <div>
-              <div className="font-medium text-sm text-[var(--brand-primary)]">{title}</div>
-              <div className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">{desc}</div>
+              <div className="font-medium text-sm text-[var(--brand-primary)] flex items-center gap-1.5"><Icon size={12} className="text-[var(--brand-accent)]" />{title}</div>
+              <div className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">{desc}</div>
             </div>
           </div>
         ))}
@@ -265,11 +273,10 @@ function ChoirPulseSection({ parishId }) {
 
 // ─── Quick actions grid ───────────────────────────────────────────────────────
 function QuickActionsGrid({ parish, parishId }) {
-  const scrollToFeed = () => {};
   return (
     <div data-testid="quick-actions-grid">
       <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)] font-semibold mb-3">Quick access</div>
-      <div className="grid grid-cols-4 gap-2 sm:gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
         {QUICK_ACTIONS.map((action) => {
           const Icon = action.icon;
           const enabled = action.enabledField ? Boolean(parish?.[action.enabledField]) : (action.kind !== "livestream" || Boolean(parish?.livestream_url));
@@ -278,13 +285,15 @@ function QuickActionsGrid({ parish, parishId }) {
           if (action.kind === "parish_detail") href = `/app/parishes/${parishId}`;
           if (action.kind === "livestream") { href = parish?.livestream_url || null; external = true; }
 
-          const cls = `flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl border text-center transition-all duration-150 ${
-            enabled ? "bg-[var(--bg-paper)] border-[var(--border-default)] hover:border-[var(--brand-accent)] hover:shadow-sm cursor-pointer" : "bg-[var(--bg-subtle)] border-[var(--border-default)] opacity-40 cursor-not-allowed"
+          const cls = `flex flex-col items-center gap-2.5 p-4 rounded-2xl border text-center transition-all duration-150 ${
+            enabled
+              ? "bg-[var(--bg-paper)] border-[var(--border-default)] hover:border-[var(--brand-accent)] hover:shadow-md cursor-pointer"
+              : "bg-[var(--bg-subtle)] border-[var(--border-default)] opacity-40 cursor-not-allowed"
           }`;
           const inner = (
             <>
-              <div className={`w-9 h-9 rounded-lg grid place-items-center ${enabled ? "bg-[var(--bg-subtle)]" : ""}`}>
-                <Icon size={18} className={enabled ? "text-[var(--brand-primary)]" : "text-[var(--text-tertiary)]"} />
+              <div className={`w-11 h-11 rounded-xl grid place-items-center ${enabled ? "bg-[var(--brand-primary)]/8" : ""}`}>
+                <Icon size={20} className={enabled ? "text-[var(--brand-primary)]" : "text-[var(--text-tertiary)]"} />
               </div>
               <span className="text-xs font-medium leading-tight text-[var(--text-primary)]">{action.label}</span>
               {!enabled && <span className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wide">Not enabled</span>}
