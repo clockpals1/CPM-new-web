@@ -2163,11 +2163,118 @@ import re as _re_hymn
 
 _RESERVED_PHRASES = ["reserved", "will be provided", "pending", "information will be", "not available"]
 
+def _parse_hymn_markdown(raw: str) -> list:
+    """
+    Parse the structured Markdown format produced by the admin knowledge base doc:
+        ### Hymn 1
+        Category: PROCESSIONAL HYMN
+        Opening line: Jerih Moh Yamah
+        Lyrics:
+        - Jerih Moh Yamah
+        - ...
+
+        ### Hymn 20
+        Category: PROCESSIONAL HYMN
+        Status: Reserved
+        Response: This hymn is reserved. Information will be provided soon.
+    """
+    hymns = []
+    current = None
+    in_lyrics = False
+
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+
+        # ── New hymn header: ### Hymn N or ## Hymn N ──────────────────────
+        hm = _re_hymn.match(r'^#{2,3}\s+Hymn\s+(\d+)', line, _re_hymn.IGNORECASE)
+        if hm:
+            if current is not None:
+                hymns.append(current)
+            current = {
+                "id": new_id(),
+                "number": int(hm.group(1)),
+                "section": "General",
+                "category": "",
+                "title": "",
+                "opening_line": "",
+                "lines": [],
+                "reserved": False,
+            }
+            in_lyrics = False
+            continue
+
+        if current is None:
+            continue
+
+        # ── Category ────────────────────────────────────────────────────────
+        if _re_hymn.match(r'^Category\s*:', line, _re_hymn.IGNORECASE):
+            val = line.split(":", 1)[1].strip()
+            current["category"] = val
+            current["section"] = val
+            in_lyrics = False
+            continue
+
+        # ── Opening line ────────────────────────────────────────────────────
+        if _re_hymn.match(r'^Opening\s+line\s*:', line, _re_hymn.IGNORECASE):
+            val = line.split(":", 1)[1].strip()
+            current["opening_line"] = val
+            if not current["title"]:
+                current["title"] = val[:80]
+            in_lyrics = False
+            continue
+
+        # ── Status: Reserved ────────────────────────────────────────────────
+        if _re_hymn.match(r'^Status\s*:', line, _re_hymn.IGNORECASE):
+            if "reserved" in line.lower():
+                current["reserved"] = True
+            in_lyrics = False
+            continue
+
+        # ── Response line (just confirms reserved, skip content) ────────────
+        if _re_hymn.match(r'^Response\s*:', line, _re_hymn.IGNORECASE):
+            in_lyrics = False
+            continue
+
+        # ── Lyrics section marker ────────────────────────────────────────────
+        if _re_hymn.match(r'^Lyrics\s*:', line, _re_hymn.IGNORECASE):
+            in_lyrics = True
+            continue
+
+        # ── Lyric list item "- ..." ──────────────────────────────────────────
+        if in_lyrics and line.startswith("- "):
+            current["lines"].append(line[2:])
+            continue
+
+        # ── Stop lyrics on any new labelled field ────────────────────────────
+        if in_lyrics and _re_hymn.match(r'^[A-Za-z][A-Za-z\s]+\s*:', line):
+            in_lyrics = False
+
+    if current is not None:
+        hymns.append(current)
+
+    result = []
+    for h in hymns:
+        h["lyrics_text"] = "\n".join(h["lines"])
+        del h["lines"]
+        if not h.get("title") and h.get("opening_line"):
+            h["title"] = h["opening_line"][:80]
+        h["created_at"] = iso(now_utc())
+        result.append(h)
+    return result
+
+
 def _parse_hymn_source(raw: str) -> list:
     """
-    Parse raw CCC hymn text into one structured dict per hymn.
-    Handles: section headers, numbered hymns, reserved ranges, chorus/lyric lines.
+    Auto-detect format and parse CCC hymn text into structured hymn records.
+    Supports:
+      1. Structured Markdown (### Hymn N / Category: / Opening line: / Lyrics: / Status: Reserved)
+      2. Raw plain text (ALL-CAPS section headers, bare hymn numbers, inline lyrics)
     """
+    # ── Auto-detect: Markdown format ─────────────────────────────────────────
+    if _re_hymn.search(r'^#{2,3}\s+Hymn\s+\d+', raw, _re_hymn.MULTILINE | _re_hymn.IGNORECASE):
+        return _parse_hymn_markdown(raw)
+
+    # ── Raw plain-text format ─────────────────────────────────────────────────
     # Pre-scan: collect explicit reserved ranges  e.g. "Hymns 51-100 are reserved"
     reserved_ranges = []
     for m in _re_hymn.finditer(
@@ -2199,7 +2306,6 @@ def _parse_hymn_source(raw: str) -> list:
             rm = _re_hymn.search(r'hymns?\s+(\d+)\s*[-\u2013to]+\s*(\d+)', line, _re_hymn.IGNORECASE)
             if rm:
                 reserved_ranges.append((int(rm.group(1)), int(rm.group(2))))
-            # Standalone reserved notice for current hymn
             if current is not None and not rm:
                 current["reserved"] = True
             continue
@@ -2236,7 +2342,6 @@ def _parse_hymn_source(raw: str) -> list:
     if current is not None:
         hymns.append(current)
 
-    # Finalise records
     result = []
     for h in hymns:
         h["lyrics_text"] = "\n".join(h["lines"])
