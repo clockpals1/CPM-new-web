@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -344,6 +344,8 @@ function AuditManager() {
 function IntegrationsManager() {
   const [items, setItems] = useState([]);
   const FIELDS = [
+    { group: "AI Assistant", label: "openai_api_key", title: "OpenAI API key", desc: "Used for the CPM Assistant chatbot and AI-generated daily feed posts. Get yours at platform.openai.com.", secret: true, placeholder: "sk-…" },
+    { label: "daily_posts_enabled", title: "Daily Posts enabled", desc: "Set to 'true' to enable automatic daily devotion/prayer/verse/music posts. Requires OpenAI key above.", secret: false, placeholder: "true" },
     { group: "Parish Join Rules", label: "global_join_mode", title: "Global join mode", desc: "per_parish = each parish decides; open = anyone joins directly; location_based = same-country auto-approve; request_only = always admin approval.", secret: false, placeholder: "per_parish" },
     { label: "max_parish_memberships", title: "Max parish memberships per user", desc: "How many active + pending memberships a user may hold (default: 2).", secret: false, placeholder: "2" },
     { label: "join_state_match_required", title: "Require state match for location-based join", desc: "Set true to also require state/region match in addition to country (default: false).", secret: false, placeholder: "false" },
@@ -719,10 +721,348 @@ function ChoirHubManager() {
   );
 }
 
+// ── Parish Bulk Import Manager ───────────────────────────────────────────
+function ParishImportManager() {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  const downloadSample = async () => {
+    try {
+      const { data } = await http.get("/admin/parishes/sample");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "cpm-parishes-sample.json"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const processFile = async (file) => {
+    if (!file || !file.name.endsWith(".json")) return toast.error("Please select a .json file");
+    setBusy(true); setResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) return toast.error("File must contain a JSON array of parish objects");
+      const { data: res } = await http.post("/admin/parishes/import", data);
+      setResult(res);
+      toast.success(`Import complete: ${res.created} created, ${res.skipped} skipped`);
+    } catch (e) { toast.error(formatErr(e) || "Invalid JSON file"); }
+    finally { setBusy(false); }
+  };
+
+  const onFile = (e) => processFile(e.target.files?.[0]);
+  const onDrop = (e) => { e.preventDefault(); setDragging(false); processFile(e.dataTransfer.files?.[0]); };
+
+  return (
+    <div className="space-y-6">
+      <div className="card-surface p-5 space-y-4">
+        <h3 className="font-display text-xl text-[var(--brand-primary)] flex items-center gap-2"><Download size={16} /> Download Sample Format</h3>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Download the sample JSON template, fill in your parishes (images via URL, coordinates optional), then upload below. All fields except <code className="bg-[var(--bg-subtle)] px-1 rounded">name</code>, <code className="bg-[var(--bg-subtle)] px-1 rounded">country</code>, and <code className="bg-[var(--bg-subtle)] px-1 rounded">city</code> are optional.
+        </p>
+        <button onClick={downloadSample} className="btn-primary inline-flex items-center gap-2" data-testid="parish-sample-download">
+          <Download size={15} /> Download cpm-parishes-sample.json
+        </button>
+      </div>
+
+      <div className="card-surface p-5 space-y-4">
+        <h3 className="font-display text-xl text-[var(--brand-primary)] flex items-center gap-2"><Upload size={16} /> Upload Parish JSON</h3>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer ${
+            dragging ? "border-[var(--brand-accent)] bg-amber-50" : "border-[var(--border-default)] hover:border-[var(--brand-primary)]"
+          }`}
+          onClick={() => document.getElementById("parish-json-upload").click()}
+          data-testid="parish-drop-zone"
+        >
+          <Upload size={28} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+          <p className="text-sm font-medium text-[var(--brand-primary)]">Drop your JSON file here or click to browse</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1">Accepts .json files only</p>
+          <input id="parish-json-upload" type="file" accept=".json" className="hidden" onChange={onFile} />
+        </div>
+        {busy && <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]"><Loader2 size={16} className="animate-spin" /> Importing parishes…</div>}
+        {result && (
+          <div className={`rounded-lg p-4 text-sm space-y-1 ${
+            result.errors?.length ? "bg-amber-50 border border-amber-200" : "bg-emerald-50 border border-emerald-200"
+          }`} data-testid="import-result">
+            <div className="font-medium">{result.created} parish{result.created !== 1 ? "es" : ""} created · {result.skipped} skipped (already exist)</div>
+            {result.errors?.length > 0 && (
+              <div className="space-y-0.5">
+                {result.errors.map((e, i) => <div key={i} className="text-amber-700 text-xs">⚠ {e}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Settings / Ranks Bulk Import ──────────────────────────────────────────
+function SettingsImportManager() {
+  const IMPORTABLE = [
+    { key: "ccc_ranks", label: "CCC Ranks & Titles" },
+    { key: "badges", label: "Recognition Badges" },
+    { key: "service_types", label: "Service Team Types" },
+    { key: "event_categories", label: "Event Categories" },
+    { key: "prayer_categories", label: "Prayer Categories" },
+  ];
+  const [activeKey, setActiveKey] = useState("ccc_ranks");
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const downloadSample = async () => {
+    try {
+      const { data } = await http.get(`/admin/settings/sample/${activeKey}`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `cpm-${activeKey}-sample.json`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const processFile = async (file) => {
+    if (!file) return;
+    setBusy(true); setResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) return toast.error("File must contain a JSON array of strings");
+      const { data: res } = await http.post(`/admin/settings/import/${activeKey}`, data);
+      setResult(res);
+      toast.success(`${res.added} values added, ${res.skipped} skipped`);
+    } catch (e) { toast.error(formatErr(e) || "Invalid JSON"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {IMPORTABLE.map((k) => (
+          <button key={k.key} onClick={() => { setActiveKey(k.key); setResult(null); }}
+            className={`px-3 py-1.5 text-sm rounded-md border ${
+              activeKey === k.key ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)]"
+            }`}>{k.label}</button>
+        ))}
+      </div>
+      <div className="card-surface p-5 space-y-4">
+        <p className="text-sm text-[var(--text-secondary)]">
+          The sample file is a simple JSON array of strings. Edit the values, then upload to bulk-add them to <strong>{IMPORTABLE.find(k => k.key === activeKey)?.label}</strong>. Existing values are skipped.
+        </p>
+        <div className="flex gap-3 flex-wrap">
+          <button onClick={downloadSample} className="btn-primary inline-flex items-center gap-2">
+            <Download size={15} /> Download sample
+          </button>
+          <label className="btn-accent inline-flex items-center gap-2 cursor-pointer">
+            <Upload size={15} /> Upload JSON
+            <input type="file" accept=".json" className="hidden" onChange={(e) => processFile(e.target.files?.[0])} />
+          </label>
+        </div>
+        {busy && <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]"><Loader2 size={16} className="animate-spin" /> Importing…</div>}
+        {result && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm" data-testid="settings-import-result">
+            <span className="font-medium">{result.added} added</span> · {result.skipped} skipped
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── AI Knowledge Base Manager ─────────────────────────────────────────────
+function AIKnowledgeManager() {
+  const [docs, setDocs] = useState([]);
+  const [form, setForm] = useState({ title: "", content: "" });
+  const [busy, setBusy] = useState(false);
+
+  const load = () => http.get("/admin/ai/documents").then((r) => setDocs(r.data)).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!form.title.trim() || !form.content.trim()) return toast.error("Title and content required");
+    setBusy(true);
+    try {
+      await http.post("/admin/ai/documents", form);
+      toast.success("Document added to knowledge base");
+      setForm({ title: "", content: "" }); load();
+    } catch (e) { toast.error(formatErr(e)); } finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    try { await http.delete(`/admin/ai/documents/${id}`); toast.success("Removed"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="card-surface p-5 border-l-4 border-[var(--brand-accent)]">
+        <div className="flex items-start gap-3">
+          <Bot size={20} className="text-[var(--brand-accent)] mt-0.5 shrink-0" />
+          <div>
+            <div className="font-medium text-[var(--brand-primary)] mb-1">How the CPM Assistant learns</div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Paste text from the CCC Constitution, Bible lessons, church history, or any document. The AI bot reads all uploaded documents as context when answering member questions. Supports plain text — you can paste directly from a PDF.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-surface p-5 space-y-3">
+        <h3 className="font-display text-xl text-[var(--brand-primary)] flex items-center gap-2"><Plus size={16} /> Add Knowledge Document</h3>
+        <input
+          className="input-clean"
+          placeholder="Document title (e.g. CCC Constitution 2023, Bible Lesson: The Armour of God)"
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          data-testid="ai-doc-title"
+        />
+        <textarea
+          className="input-clean min-h-[200px] resize-y font-mono text-xs"
+          placeholder="Paste the document text here… (plain text, from PDF or Word)"
+          value={form.content}
+          onChange={(e) => setForm({ ...form, content: e.target.value })}
+          data-testid="ai-doc-content"
+        />
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-[var(--text-tertiary)]">{form.content.length.toLocaleString()} characters</span>
+          <button onClick={add} disabled={busy} className="btn-primary inline-flex items-center gap-2" data-testid="ai-doc-add">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} Add to Knowledge Base
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="text-xs uppercase tracking-widest font-semibold text-[var(--text-tertiary)]">
+          Knowledge Base — {docs.length} document{docs.length !== 1 ? "s" : ""}
+        </div>
+        {docs.length === 0 && (
+          <div className="card-surface p-8 text-center">
+            <BookOpen size={28} className="mx-auto text-[var(--text-tertiary)] mb-2" />
+            <p className="text-sm text-[var(--text-secondary)]">No documents uploaded yet. Add the CCC Constitution or any church document above.</p>
+          </div>
+        )}
+        {docs.map((d) => (
+          <div key={d.id} className="card-surface p-4 flex items-start gap-3" data-testid={`ai-doc-${d.id}`}>
+            <FileText size={16} className="text-[var(--brand-accent)] mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-[var(--brand-primary)] text-sm">{d.title}</div>
+              <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                {(d.char_count || 0).toLocaleString()} chars · Added by {d.created_by_name} · {new Date(d.created_at).toLocaleDateString()}
+              </div>
+            </div>
+            <button onClick={() => remove(d.id)} className="text-red-600 hover:text-red-800 p-1 shrink-0" data-testid={`ai-doc-delete-${d.id}`}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Daily Posts Manager ───────────────────────────────────────────────────
+function DailyPostsManager() {
+  const [enabled, setEnabled] = useState("");
+  const [triggering, setTriggering] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    http.get("/integrations").then((r) => {
+      const item = r.data.find((i) => i.label === "daily_posts_enabled");
+      setEnabled(item?.meta?.value || "false");
+    }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await http.post("/integrations", { label: "daily_posts_enabled", value: enabled });
+      toast.success(`Daily posts ${enabled === "true" ? "enabled" : "disabled"}`);
+    } catch (e) { toast.error(formatErr(e)); } finally { setSaving(false); }
+  };
+
+  const trigger = async () => {
+    setTriggering(true);
+    try {
+      await http.post("/admin/daily-posts/trigger", {});
+      toast.success("Daily posts generation started! Check the Global Feed in a moment.");
+    } catch (e) { toast.error(formatErr(e)); } finally { setTriggering(false); }
+  };
+
+  const POST_TYPES = [
+    { emoji: "✝️", label: "Daily Devotion", desc: "A short spiritual devotion with a Bible verse reference" },
+    { emoji: "🙏", label: "Morning Prayer", desc: "A community prayer for members to pray together" },
+    { emoji: "📖", label: "Verse of the Day", desc: "A Bible verse with brief CCC-centred reflection" },
+    { emoji: "🎵", label: "Music for the Day", desc: "A suggested CCC hymn or spiritual song" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="card-surface p-5 border-l-4 border-[var(--brand-accent)]">
+        <div className="flex items-start gap-3">
+          <Sparkles size={20} className="text-[var(--brand-accent)] mt-0.5 shrink-0" />
+          <div>
+            <div className="font-medium text-[var(--brand-primary)] mb-1">AI-Generated Daily Posts</div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              When enabled, the server automatically generates 4 posts to the Global Feed every day at <strong>6:00 AM UTC</strong> — a devotion, prayer, Bible verse, and music suggestion — all tailored to CCC worship and culture. Requires an OpenAI API key in Integrations.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {POST_TYPES.map((p) => (
+          <div key={p.label} className="card-surface p-4 text-center space-y-2">
+            <div className="text-3xl">{p.emoji}</div>
+            <div className="font-medium text-sm text-[var(--brand-primary)]">{p.label}</div>
+            <div className="text-xs text-[var(--text-secondary)]">{p.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card-surface p-5 space-y-4">
+        <h3 className="font-display text-xl text-[var(--brand-primary)]">Configuration</h3>
+        <div className="flex items-center gap-4 flex-wrap">
+          <label className="text-sm font-medium text-[var(--brand-primary)]">Daily Posts:</label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEnabled("true")}
+              className={`px-4 py-2 rounded-md border text-sm transition-colors ${
+                enabled === "true" ? "bg-emerald-600 text-white border-emerald-600" : "border-[var(--border-default)] text-[var(--text-secondary)]"
+              }`}
+            >Enable</button>
+            <button
+              onClick={() => setEnabled("false")}
+              className={`px-4 py-2 rounded-md border text-sm transition-colors ${
+                enabled === "false" ? "bg-red-600 text-white border-red-600" : "border-[var(--border-default)] text-[var(--text-secondary)]"
+              }`}
+            >Disable</button>
+          </div>
+          <button onClick={save} disabled={saving} className="btn-primary inline-flex items-center gap-2">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : null} Save
+          </button>
+        </div>
+        <div className="border-t border-[var(--border-default)] pt-4">
+          <div className="text-sm font-medium text-[var(--brand-primary)] mb-2">Manual Trigger</div>
+          <p className="text-xs text-[var(--text-secondary)] mb-3">Fire today's posts right now (skips any already posted today). Useful for testing or if the server missed a scheduled run.</p>
+          <button onClick={trigger} disabled={triggering} className="btn-accent inline-flex items-center gap-2" data-testid="trigger-daily-posts">
+            {triggering ? <Loader2 size={15} className="animate-spin" /> : <PlayCircle size={15} />}
+            {triggering ? "Generating…" : "Trigger Daily Posts Now"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const TABS = [
     { k: "settings", l: "Settings & Catalog", icon: BadgeCheck },
+    { k: "parish-import", l: "Parish Import", icon: Upload },
+    { k: "ranks-import", l: "Ranks & Catalogs Import", icon: Download },
     { k: "parishes", l: "Parishes", icon: Plus },
     { k: "approvals", l: "Approvals", icon: BadgeCheck },
     { k: "users", l: "Users & Roles", icon: Shield },
@@ -730,6 +1070,8 @@ export default function Admin() {
     { k: "moderation", l: "Moderation", icon: FileWarning },
     { k: "prayer-mod", l: "Prayer Wall", icon: Heart },
     { k: "choir-hub", l: "Choir Hub", icon: Music },
+    { k: "ai-knowledge", l: "AI Knowledge Base", icon: Bot },
+    { k: "daily-posts", l: "Daily Posts", icon: Sparkles },
     { k: "integrations", l: "Integrations", icon: Zap },
     { k: "audit", l: "Audit Log", icon: History },
   ];
@@ -747,6 +1089,8 @@ export default function Admin() {
         ))}
       </div>
       {tab === "settings" && <SettingsManager />}
+      {tab === "parish-import" && <ParishImportManager />}
+      {tab === "ranks-import" && <SettingsImportManager />}
       {tab === "parishes" && <ParishesManager />}
       {tab === "approvals" && <ApprovalsManager />}
       {tab === "users" && <UsersManager />}
@@ -754,6 +1098,8 @@ export default function Admin() {
       {tab === "moderation" && <ModerationManager />}
       {tab === "prayer-mod" && <PrayerModerationManager />}
       {tab === "choir-hub" && <ChoirHubManager />}
+      {tab === "ai-knowledge" && <AIKnowledgeManager />}
+      {tab === "daily-posts" && <DailyPostsManager />}
       {tab === "integrations" && <IntegrationsManager />}
       {tab === "audit" && <AuditManager />}
     </div>

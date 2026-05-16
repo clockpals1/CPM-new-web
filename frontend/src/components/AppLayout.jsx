@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import ChatBot from "./ChatBot";
 import {
   Home, Church, Users, HandHelping, Calendar, Music, Music2, Briefcase,
   Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search, Globe, MessageCircle
@@ -91,6 +92,9 @@ export default function AppLayout({ children }) {
 
       {/* Main */}
       <div className="flex-1 md:ml-64 min-h-screen flex flex-col">
+        {/* CPM AI Assistant — always available */}
+        <ChatBot />
+
         {/* Topbar */}
         <header className="sticky top-0 z-30 glass border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 md:px-8 h-14">

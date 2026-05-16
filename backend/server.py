@@ -1916,6 +1916,298 @@ async def parish_suggestions(user: dict = Depends(require_roles("super_admin")))
     return await db.parish_suggestions.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 
+# ── Parish Bulk Import ──────────────────────────────────────────────────
+PARISH_SAMPLE = [
+    {
+        "name": "CCC Bethel Parish Example",
+        "country": "Nigeria", "state": "Lagos", "city": "Lagos",
+        "address": "12 Palm Avenue, Lagos Island",
+        "shepherd_name": "Shepherd Emmanuel Adewale",
+        "phone": "+2348012345678",
+        "website": "https://bethel.ccc.org",
+        "service_times": "Sunday 9:00am, Wednesday 6:00pm",
+        "description": "A vibrant Celestial Church of Christ parish in the heart of Lagos.",
+        "image_url": "https://example.com/parish-photo.jpg",
+        "lat": 6.5244, "lng": 3.3792,
+        "status": "active", "join_mode": "open",
+        "choir_enabled": True, "ministries_enabled": True,
+    },
+    {
+        "name": "CCC Celestial Parish London",
+        "country": "United Kingdom", "state": "Greater London", "city": "London",
+        "address": "45 Church Road, Peckham, London SE15",
+        "shepherd_name": "Pastor Adebisi Okonkwo",
+        "phone": "+447700900000",
+        "website": "", "service_times": "Sunday 10:30am",
+        "description": "Serving the Celestial family across South London.",
+        "image_url": "", "lat": 51.4735, "lng": -0.0682,
+        "status": "active", "join_mode": "open",
+        "choir_enabled": True, "ministries_enabled": False,
+    },
+]
+
+@api.get("/admin/parishes/sample")
+async def parish_sample_json(actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    """Download sample JSON template for bulk parish import."""
+    return PARISH_SAMPLE
+
+@api.post("/admin/parishes/import")
+async def import_parishes(body: List[dict], actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    """Bulk import parishes from a JSON array."""
+    created = 0; skipped = 0; errors = []
+    for p in body:
+        name = (p.get("name") or "").strip()
+        if not name:
+            errors.append("Entry skipped: missing name"); continue
+        existing = await db.parishes.find_one({"name": name})
+        if existing:
+            skipped += 1; continue
+        try:
+            doc = {
+                "id": new_id(), "name": name,
+                "country": p.get("country", ""), "state": p.get("state", ""),
+                "city": p.get("city", ""), "address": p.get("address", ""),
+                "shepherd_name": p.get("shepherd_name", ""), "phone": p.get("phone", ""),
+                "website": p.get("website", ""), "service_times": p.get("service_times", ""),
+                "description": p.get("description", ""), "image_url": p.get("image_url", ""),
+                "lat": float(p["lat"]) if p.get("lat") not in (None, "") else None,
+                "lng": float(p["lng"]) if p.get("lng") not in (None, "") else None,
+                "status": p.get("status", "active"),
+                "join_mode": p.get("join_mode", "open"),
+                "choir_enabled": bool(p.get("choir_enabled", True)),
+                "ministries_enabled": bool(p.get("ministries_enabled", True)),
+                "livestream_url": "", "created_at": iso(now_utc()), "created_by": actor["id"],
+            }
+            await db.parishes.insert_one(doc)
+            created += 1
+        except Exception as ex:
+            errors.append(f"{name}: {ex}")
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "parish_bulk_import", "target": "parishes",
+        "details": {"created": created, "skipped": skipped}, "created_at": iso(now_utc()),
+    })
+    return {"created": created, "skipped": skipped, "errors": errors}
+
+
+# ── Settings / Ranks Bulk Import ─────────────────────────────────────────
+SETTINGS_SAMPLES: Dict[str, List] = {
+    "ccc_ranks": [
+        "Praying Band Member", "Tender", "Full Member", "Senior Member",
+        "Deacon", "Deaconess", "Evangelist", "Pastor",
+        "Reverend", "Reverend Superintendent", "Senior Shepherd", "Superior Shepherd",
+    ],
+    "badges": [
+        "New Member", "Choir Star", "Prayer Warrior", "Testimony Champion",
+        "Service Leader", "Youth Ambassador", "Community Builder", "Faithful Giver",
+    ],
+    "service_types": [
+        "Ushering", "Choir", "Protocol", "Media & Streaming",
+        "Children Ministry", "Prayer Team", "Welfare", "Evangelism",
+    ],
+    "event_categories": [
+        "Harvest Festival", "Special Services", "Youth Rally",
+        "Women's Meeting", "Bible Study", "Thanksgiving Service", "Musical Night",
+    ],
+    "prayer_categories": [
+        "Healing", "Deliverance", "Provision", "Family", "Nation", "Thanksgiving",
+    ],
+}
+
+@api.get("/admin/settings/sample/{key}")
+async def settings_sample_json(key: str, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    """Download sample JSON array for bulk-importing a settings catalog."""
+    sample = SETTINGS_SAMPLES.get(key, ["Example Value 1", "Example Value 2", "Example Value 3"])
+    return sample
+
+@api.post("/admin/settings/import/{key}")
+async def import_settings_bulk(key: str, body: List[str], actor: dict = Depends(require_roles("super_admin"))):
+    """Bulk import setting labels from a JSON array of strings."""
+    existing_labels = {
+        i["label"] for i in
+        await db.admin_settings.find({"key": key}, {"label": 1}).to_list(None)
+    }
+    order = await db.admin_settings.count_documents({"key": key})
+    added = 0; skipped = 0
+    for raw in body:
+        label = str(raw).strip()
+        if not label or label in existing_labels:
+            skipped += 1; continue
+        await db.admin_settings.insert_one({
+            "id": new_id(), "key": key, "label": label, "order": order + added,
+            "active": True, "meta": {}, "description": "", "created_at": iso(now_utc()),
+        })
+        added += 1
+    return {"added": added, "skipped": skipped}
+
+
+# ── AI Knowledge Base Documents ──────────────────────────────────────────
+@api.get("/admin/ai/documents")
+async def list_ai_documents(actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    return await db.ai_documents.find({}, {"_id": 0, "content": 0}).sort("created_at", -1).to_list(100)
+
+@api.post("/admin/ai/documents")
+async def add_ai_document(body: dict, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    title = (body.get("title") or "").strip()
+    content = (body.get("content") or "").strip()
+    if not title or not content:
+        raise HTTPException(400, "title and content required")
+    doc = {
+        "id": new_id(), "title": title, "content": content,
+        "char_count": len(content), "created_by_name": actor.get("name"),
+        "created_at": iso(now_utc()),
+    }
+    await db.ai_documents.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.delete("/admin/ai/documents/{did}")
+async def delete_ai_document(did: str, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    await db.ai_documents.delete_one({"id": did})
+    return {"ok": True}
+
+
+# ── AI Chat ──────────────────────────────────────────────────────────────
+_CPM_SYSTEM = """You are CPM Assistant — the friendly, knowledgeable AI guide for CelestialPeopleMeet (CPM), the official digital platform of the worldwide Celestial Church of Christ (CCC) community.
+
+YOUR ROLES:
+1. Help members navigate CPM features: parishes, prayer wall, choir, testimonies, careers, messages, events, service teams, profiles, and the CPM Wave music platform.
+2. Answer questions about the Celestial Church of Christ — its history, beliefs, ordinances, the "sutana" (white garment), founder Samuel Bilewu Joseph Oshoffa, and worldwide administration.
+3. Share Bible references, spiritual encouragement, and guidance in the spirit of CCC worship.
+4. Use uploaded Knowledge Base documents (constitution, CCC lessons, etc.) to give grounded, accurate answers.
+5. For parish-specific questions you cannot answer, invite the member to contact their shepherd.
+
+TONE: Warm, reverent, encouraging. You may greet with "Amen", "Hallelujah", or "Greetings in the name of our Lord". 
+LIMITS: Do not give medical advice, make up church doctrine, or discuss politics."""
+
+@api.post("/ai/chat")
+async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
+    message = (body.get("message") or "").strip()[:2000]
+    history = body.get("history", [])
+    if not message:
+        raise HTTPException(400, "message required")
+    openai_key = await get_config("openai_api_key")
+    if not openai_key:
+        return {"reply": "The CPM Assistant is not yet configured. Please ask your administrator to add an OpenAI API key in Admin → Integrations.", "error": True}
+    # Build context from uploaded knowledge-base docs
+    docs = await db.ai_documents.find({}, {"_id": 0, "title": 1, "content": 1}).to_list(15)
+    kb = ""
+    if docs:
+        kb = "\n\n=== UPLOADED KNOWLEDGE BASE ===\n"
+        for d in docs:
+            kb += f"\n## {d['title']}\n{d['content'][:2500]}\n"
+        kb += "\n=== END KNOWLEDGE BASE ==="
+    messages = [{"role": "system", "content": _CPM_SYSTEM + kb}]
+    for h in (history or [])[-8:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": str(h["content"])[:600]})
+    messages.append({"role": "user", "content": message})
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                json={"model": "gpt-4o-mini", "messages": messages, "max_tokens": 600, "temperature": 0.7},
+            )
+        if resp.status_code != 200:
+            log.error("OpenAI error %s: %s", resp.status_code, resp.text[:300])
+            return {"reply": "I'm having trouble connecting right now. Please try again shortly.", "error": True}
+        return {"reply": resp.json()["choices"][0]["message"]["content"], "error": False}
+    except Exception as ex:
+        log.error("AI chat exception: %s", ex)
+        return {"reply": "I'm temporarily unavailable. Please try again in a moment.", "error": True}
+
+
+# ── Daily Scheduled Posts ────────────────────────────────────────────────
+_DAILY_TYPES = [
+    {"type": "devotion",   "label": "Daily Devotion",       "emoji": "✝️"},
+    {"type": "prayer",     "label": "Morning Prayer",        "emoji": "🙏"},
+    {"type": "bible",      "label": "Verse of the Day",      "emoji": "📖"},
+    {"type": "music",      "label": "Music for the Day",     "emoji": "🎵"},
+]
+_DAILY_PROMPTS = {
+    "devotion": "Write a short, uplifting daily devotion (4-5 sentences) for Celestial Church of Christ members worldwide. Include a Bible verse reference. Warm and encouraging tone.",
+    "prayer":   "Write a short morning prayer (5-7 sentences) for CCC members to pray together today. Begin with 'Heavenly Father' or 'Lord God Almighty'. Reverent and faith-building.",
+    "bible":    "Share one Bible verse (full reference) meaningful for CCC members today, followed by 2-3 sentences of reflection on its spiritual significance.",
+    "music":    "Suggest one Celestial Church of Christ hymn or spiritual song by title, and explain in 2-3 sentences why this song is meaningful for worship today. If possible, include a line from the lyrics.",
+}
+
+async def _generate_daily_content(post_type: str, key: str) -> Optional[str]:
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": "You are a spiritual writer for the Celestial Church of Christ (CCC) worldwide community. Write with reverence and warmth."},
+                        {"role": "user", "content": _DAILY_PROMPTS.get(post_type, "Write a short spiritual encouragement for CCC members.")},
+                    ],
+                    "max_tokens": 280, "temperature": 0.82,
+                },
+            )
+        if resp.status_code == 200:
+            return resp.json()["choices"][0]["message"]["content"]
+    except Exception as ex:
+        log.error("[daily-post] generation error for %s: %s", post_type, ex)
+    return None
+
+async def fire_daily_posts():
+    """Generate and post daily devotionals, prayers, bible verses, and music to the global feed."""
+    enabled = await get_config("daily_posts_enabled")
+    key = await get_config("openai_api_key")
+    if enabled != "true" or not key:
+        log.info("[daily-posts] Skipped — not enabled or OpenAI key missing")
+        return
+    sys_user = await db.users.find_one({"role": "super_admin"}, {"_id": 0})
+    if not sys_user:
+        log.warning("[daily-posts] No super_admin found to author posts")
+        return
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for pt in _DAILY_TYPES:
+        existing = await db.feed_posts.find_one({"daily_post_type": pt["type"], "daily_post_date": today})
+        if existing:
+            continue
+        content = await _generate_daily_content(pt["type"], key)
+        if not content:
+            continue
+        await db.feed_posts.insert_one({
+            "id": new_id(),
+            "user_id": sys_user["id"], "user_name": "CPM Community",
+            "body": f"{pt['emoji']} **{pt['label']}**\n\n{content}",
+            "scope": "global", "pinned": False,
+            "daily_post_type": pt["type"], "daily_post_date": today,
+            "reactions": {"amen": 0, "hallelujah": 0, "fire": 0, "pray": 0},
+            "comments": [], "created_at": iso(now_utc()),
+        })
+        log.info("[daily-posts] Posted %s for %s", pt["type"], today)
+
+@api.post("/admin/daily-posts/trigger")
+async def trigger_daily_posts(actor: dict = Depends(require_roles("super_admin"))):
+    """Manually trigger today's daily posts."""
+    import asyncio as _asyncio
+    _asyncio.create_task(fire_daily_posts())
+    return {"ok": True, "message": "Daily posts generation started in background"}
+
+async def _daily_post_loop():
+    import asyncio as _asyncio
+    while True:
+        try:
+            await fire_daily_posts()
+        except Exception as ex:
+            log.error("[daily-posts] loop error: %s", ex)
+        now = datetime.now(timezone.utc)
+        target = now.replace(hour=6, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait = (target - now).total_seconds()
+        log.info("[daily-posts] Next run in %.0f seconds", wait)
+        await _asyncio.sleep(wait)
+
+
 # ---------------- Home Stats ----------------
 @api.get("/stats/home")
 async def home_stats():
@@ -2512,6 +2804,19 @@ async def on_startup():
                 "id": new_id(), "user_id": pa_id, "parish_id": parish_ids[0],
                 "status": "approved", "approved_at": iso(now_utc()), "created_at": iso(now_utc()),
             })
+
+    # Seed AI / daily-posts config keys (no-op if already set)
+    ai_defaults = [
+        {"label": "openai_api_key", "value": "", "description": "OpenAI API key for CPM Assistant and daily posts (sk-…)"},
+        {"label": "daily_posts_enabled", "value": "false", "description": "Set to 'true' to enable automatic daily devotion/prayer/bible/music posts to the global feed"},
+    ]
+    for ai in ai_defaults:
+        if not await get_config(ai["label"]):
+            await set_config(ai["label"], ai["value"], ai["description"])
+
+    # Start daily post background scheduler
+    import asyncio as _asyncio
+    _asyncio.create_task(_daily_post_loop())
 
     log.info("CelestialPeopleMeeet startup complete: %d parishes, settings seeded", len(parish_ids))
 
