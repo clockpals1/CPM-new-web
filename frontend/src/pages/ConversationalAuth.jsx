@@ -14,7 +14,7 @@ const STEPS_NEW = [
   { key: "ccc_rank", type: "select_setting", setting: "ccc_ranks", q: "What is your CCC rank or title?" },
   { key: "country", type: "text", q: "Which country are you currently in?", placeholder: "e.g., Nigeria" },
   { key: "city", type: "text", q: "And which city or state?", placeholder: "e.g., Lagos" },
-  { key: "parish_id", type: "parish", q: "Pick the parish closest to you (or skip to suggest one)." },
+  { key: "parish_id", type: "parish", q: "Pick your parish — you’ll be joined instantly as a member." },
   { key: "choir", type: "yesno", q: "Are you part of the choir, or interested in joining?" },
   { key: "email", type: "email", q: "What email should we use to reach you?" },
   { key: "password", type: "password", q: "Create a password to secure your account." },
@@ -60,6 +60,7 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
     try {
       if (mode === "returning") {
         await login(data.email, data.password);
+        navigate("/app");
       } else {
         await register({
           email: data.email,
@@ -72,8 +73,8 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
           parish_request: data.parish_request || null,
           interested_in_choir: !!data.choir,
         });
+        navigate(data.parish_id ? "/app/my-parish" : "/app");
       }
-      navigate("/app");
     } catch (e) {
       setErr(formatErr(e));
     } finally { setBusy(false); }

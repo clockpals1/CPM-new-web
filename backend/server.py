@@ -288,16 +288,27 @@ async def register(req: RegisterReq, response: Response):
     await db.users.insert_one(doc)
     doc.pop("_id", None)
 
-    # Optional parish join request from onboarding
+    # Instant parish join on onboarding — no pending, no approval required
     if req.parish_id:
-        await db.parish_membership_requests.insert_one({
-            "id": new_id(),
-            "user_id": user_id,
-            "parish_id": req.parish_id,
-            "status": "pending",
-            "note": "Onboarding request",
-            "created_at": iso(now_utc()),
-        })
+        parish_doc = await db.parishes.find_one({"id": req.parish_id}, {"_id": 0})
+        if parish_doc:
+            joined_at = iso(now_utc())
+            await db.parish_memberships.insert_one({
+                "id": new_id(),
+                "user_id": user_id,
+                "parish_id": req.parish_id,
+                "status": "approved",
+                "approved_at": joined_at,
+                "note": "Joined during onboarding",
+                "join_mode_used": "onboarding",
+                "created_at": joined_at,
+            })
+            await db.notifications.insert_one({
+                "id": new_id(), "user_id": user_id,
+                "title": "Welcome to your parish!",
+                "body": f"Alleluia! You have joined {parish_doc.get('name', 'your parish')}. Welcome home!",
+                "category": "membership", "read": False, "created_at": joined_at,
+            })
     if req.parish_request and not req.parish_id:
         await db.parish_suggestions.insert_one({
             "id": new_id(),
@@ -547,20 +558,12 @@ async def parish_join_eligibility(pid: str, user: dict = Depends(get_current_use
     if active + pending >= max_m:
         return {"can_direct_join": False, "can_request": False, "already_member": False, "pending": False, "reason": "membership_limit", "max": max_m}
     global_mode = await get_config("global_join_mode") or "per_parish"
-    join_mode = p.get("join_mode", "request_only") if global_mode == "per_parish" else global_mode
-    if join_mode == "open":
-        return {"can_direct_join": True, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False, "reason": "open"}
-    if join_mode == "location_based":
-        country_match = (user.get("country", "").strip().lower() == p.get("country", "").strip().lower())
-        state_req = (await get_config("join_state_match_required") or "false").lower() == "true"
-        state_match = True
-        if state_req:
-            state_match = (user.get("state", "").strip().lower() == p.get("state", "").strip().lower())
-        can_direct = country_match and state_match
-        return {"can_direct_join": can_direct, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False,
-                "reason": "location_match" if can_direct else "outside_area",
-                "country_match": country_match, "state_match_required": state_req}
-    return {"can_direct_join": False, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False, "reason": "request_only"}
+    # Default join_mode is 'open' — only 'invite_only' explicitly requires admin approval
+    join_mode = p.get("join_mode", "open") if global_mode == "per_parish" else global_mode
+    if join_mode == "invite_only":
+        return {"can_direct_join": False, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False, "reason": "invite_only"}
+    # open, location_based, request_only all allow direct join by default
+    return {"can_direct_join": True, "can_request": True, "join_mode": join_mode, "already_member": False, "pending": False, "reason": "open"}
 
 
 @api.post("/parishes/{pid}/join")
@@ -580,17 +583,12 @@ async def join_parish(pid: str, body: dict = {}, user: dict = Depends(get_curren
     if active + pending >= max_m:
         raise HTTPException(400, f"Maximum of {max_m} active parish memberships allowed")
     global_mode = await get_config("global_join_mode") or "per_parish"
-    join_mode = p.get("join_mode", "request_only") if global_mode == "per_parish" else global_mode
-    status = "pending"
-    approved_at = None
-    if join_mode == "open":
-        status = "approved"
-        approved_at = iso(now_utc())
-    elif join_mode == "location_based":
-        country_match = (user.get("country", "").strip().lower() == p.get("country", "").strip().lower())
-        if country_match:
-            status = "approved"
-            approved_at = iso(now_utc())
+    # Default is 'open' — only 'invite_only' requires admin approval
+    join_mode = p.get("join_mode", "open") if global_mode == "per_parish" else global_mode
+    approved_at = iso(now_utc())
+    status = "pending" if join_mode == "invite_only" else "approved"
+    if status != "approved":
+        approved_at = None
     doc = {
         "id": new_id(), "user_id": user["id"], "parish_id": pid,
         "status": status, "note": (body or {}).get("note", ""),
@@ -1757,12 +1755,12 @@ DEFAULT_JOB_CATEGORIES = ["Technology", "Education", "Healthcare", "Ministry", "
 DEFAULT_REPORT_REASONS = ["Spam", "Harassment", "Hate Speech", "Misinformation", "Inappropriate Content", "Other"]
 
 SAMPLE_PARISHES = [
-    {"name": "CCC Bethel Parish, Lagos", "country": "Nigeria", "city": "Lagos", "address": "12 Surulere Avenue, Lagos", "shepherd_name": "Snr Evang. Adekunle", "phone": "+234 800 000 0001", "service_times": "Sun 9am, Wed 6pm", "description": "A vibrant parish in central Lagos."},
-    {"name": "CCC Mount of Mercy Parish, Abuja", "country": "Nigeria", "city": "Abuja", "address": "5 Wuse II Road, Abuja", "shepherd_name": "Shepherd Ola", "phone": "+234 800 000 0002", "service_times": "Sun 9am, Fri 7pm", "description": "Calm worship community in the capital."},
-    {"name": "CCC Cotonou Central Parish", "country": "Benin", "city": "Cotonou", "address": "Avenue Steinmetz, Cotonou", "shepherd_name": "Evang. Houngbedji", "phone": "+229 21 00 00 03", "service_times": "Sun 9am", "description": "Historic parish near the founding city of CCC."},
-    {"name": "CCC Brooklyn Parish", "country": "United States", "city": "New York", "address": "Atlantic Ave, Brooklyn, NY", "shepherd_name": "Snr Shep. Bamidele", "phone": "+1 718 000 0004", "service_times": "Sun 10am", "description": "Diaspora parish in the heart of Brooklyn."},
-    {"name": "CCC Peckham Parish", "country": "United Kingdom", "city": "London", "address": "Rye Lane, Peckham, London", "shepherd_name": "Shep. Akinwale", "phone": "+44 20 0000 0005", "service_times": "Sun 11am", "description": "Long-established UK parish."},
-    {"name": "CCC Toronto Parish", "country": "Canada", "city": "Toronto", "address": "Eglinton Ave W, Toronto", "shepherd_name": "Evang. Adebayo", "phone": "+1 416 000 0006", "service_times": "Sun 10am", "description": "Welcoming Canadian parish for diaspora."},
+    {"name": "CCC Bethel Parish, Lagos", "country": "Nigeria", "city": "Lagos", "address": "12 Surulere Avenue, Lagos", "shepherd_name": "Snr Evang. Adekunle", "phone": "+234 800 000 0001", "service_times": "Sun 9am, Wed 6pm", "description": "A vibrant parish in central Lagos.", "join_mode": "open", "status": "active"},
+    {"name": "CCC Mount of Mercy Parish, Abuja", "country": "Nigeria", "city": "Abuja", "address": "5 Wuse II Road, Abuja", "shepherd_name": "Shepherd Ola", "phone": "+234 800 000 0002", "service_times": "Sun 9am, Fri 7pm", "description": "Calm worship community in the capital.", "join_mode": "open", "status": "active"},
+    {"name": "CCC Cotonou Central Parish", "country": "Benin", "city": "Cotonou", "address": "Avenue Steinmetz, Cotonou", "shepherd_name": "Evang. Houngbedji", "phone": "+229 21 00 00 03", "service_times": "Sun 9am", "description": "Historic parish near the founding city of CCC.", "join_mode": "open", "status": "active"},
+    {"name": "CCC Brooklyn Parish", "country": "United States", "city": "New York", "address": "Atlantic Ave, Brooklyn, NY", "shepherd_name": "Snr Shep. Bamidele", "phone": "+1 718 000 0004", "service_times": "Sun 10am", "description": "Diaspora parish in the heart of Brooklyn.", "join_mode": "open", "status": "active"},
+    {"name": "CCC Peckham Parish", "country": "United Kingdom", "city": "London", "address": "Rye Lane, Peckham, London", "shepherd_name": "Shep. Akinwale", "phone": "+44 20 0000 0005", "service_times": "Sun 11am", "description": "Long-established UK parish.", "join_mode": "open", "status": "active"},
+    {"name": "CCC Toronto Parish", "country": "Canada", "city": "Toronto", "address": "Eglinton Ave W, Toronto", "shepherd_name": "Evang. Adebayo", "phone": "+1 416 000 0006", "service_times": "Sun 10am", "description": "Welcoming Canadian parish for diaspora.", "join_mode": "open", "status": "active"},
 ]
 
 
@@ -1800,9 +1798,17 @@ async def _ensure_user(email: str, password: str, name: str, role: str, **extra)
 async def _ensure_parish(p: dict) -> str:
     existing = await db.parishes.find_one({"name": p["name"]})
     if existing:
+        # Patch join_mode and status if missing or request_only on existing seeded parishes
+        updates = {}
+        if not existing.get("join_mode") or existing.get("join_mode") == "request_only":
+            updates["join_mode"] = p.get("join_mode", "open")
+        if not existing.get("status"):
+            updates["status"] = "active"
+        if updates:
+            await db.parishes.update_one({"id": existing["id"]}, {"$set": updates})
         return existing["id"]
     pid = new_id()
-    doc = {**p, "id": pid, "status": "active", "livestream_url": "", "created_at": iso(now_utc()), "created_by": "seed"}
+    doc = {**p, "id": pid, "status": p.get("status", "active"), "join_mode": p.get("join_mode", "open"), "livestream_url": "", "created_at": iso(now_utc()), "created_by": "seed"}
     await db.parishes.insert_one(doc)
     return pid
 
@@ -1843,11 +1849,16 @@ async def on_startup():
     for jrd in join_rule_defaults:
         await _ensure_setting("integration_config", jrd["label"], 0, jrd["meta"])
 
-    # seed parishes
+    # seed parishes + migrate any existing parishes missing join_mode
     parish_ids = []
     for p in SAMPLE_PARISHES:
         pid = await _ensure_parish(p)
         parish_ids.append(pid)
+    # Ensure ALL existing parishes have join_mode set to open if unset or request_only
+    await db.parishes.update_many(
+        {"$or": [{"join_mode": {"$exists": False}}, {"join_mode": "request_only"}, {"join_mode": ""}]},
+        {"$set": {"join_mode": "open"}}
+    )
 
     # seed users
     admin_email = os.environ["ADMIN_EMAIL"]

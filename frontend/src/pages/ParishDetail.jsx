@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { http, formatErr } from "../lib/api";
 import {
   MapPin, Phone, Clock, Video, UserCheck, Loader2, BadgeCheck, ShieldCheck,
@@ -37,20 +37,26 @@ function InfoRow({ icon: Icon, label, value, children }) {
 function JoinPanel({ pid, parish, eligibility, onJoinSuccess }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const navigate = useNavigate();
 
   if (!eligibility) return null;
 
   if (eligibility.already_member) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700" data-testid="parish-member-badge">
-        <CheckCircle2 size={16} /> You are a verified member of this parish
+      <div className="space-y-2" data-testid="parish-member-badge">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+          <CheckCircle2 size={16} /> You are a verified member of this parish
+        </div>
+        <Link to="/app/my-parish" className="btn-primary inline-flex items-center gap-2 text-sm">
+          <ArrowRight size={15} /> Go to My Parish
+        </Link>
       </div>
     );
   }
   if (eligibility.pending) {
     return (
       <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700" data-testid="parish-pending-badge">
-        <Info size={16} /> Your membership request is pending review
+        <Info size={16} /> Your membership is being set up — please refresh in a moment
       </div>
     );
   }
@@ -68,28 +74,19 @@ function JoinPanel({ pid, parish, eligibility, onJoinSuccess }) {
       </div>
     );
   }
+  if (!eligibility.can_direct_join && !eligibility.can_request) return null;
 
   const doJoin = async () => {
     setBusy(true);
     try {
-      const { data } = await http.post(`/parishes/${pid}/join`, { note });
-      if (data.joined) {
-        toast.success(`Welcome to ${parish?.name || "this parish"}! You are now a member.`);
-      } else {
-        toast.success("Membership request sent. Awaiting parish admin approval.");
-      }
-      onJoinSuccess();
+      await http.post(`/parishes/${pid}/join`, { note });
+      toast.success(`Alleluia! Welcome to ${parish?.name || "this parish"}. You are now a member.`);
+      navigate("/app/my-parish");
     } catch (e) { toast.error(formatErr(e)); } finally { setBusy(false); }
   };
 
   return (
     <div className="space-y-3" data-testid="parish-join-panel">
-      {eligibility.reason === "outside_area" && (
-        <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
-          <Info size={15} className="mt-0.5 flex-shrink-0" />
-          <span>This parish uses location-based joining. Your location ({eligibility.country_match ? "same country" : "different country"}) means your request will require admin approval.</span>
-        </div>
-      )}
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
@@ -97,20 +94,10 @@ function JoinPanel({ pid, parish, eligibility, onJoinSuccess }) {
         className="input-clean min-h-[60px] text-sm w-full"
         data-testid="join-note"
       />
-      <div className="flex gap-3">
-        {eligibility.can_direct_join && (
-          <button onClick={doJoin} disabled={busy} data-testid="parish-direct-join" className="btn-primary inline-flex items-center gap-2">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-            Join Parish
-          </button>
-        )}
-        {!eligibility.can_direct_join && eligibility.can_request && (
-          <button onClick={doJoin} disabled={busy} data-testid="parish-request-join" className="btn-primary inline-flex items-center gap-2">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-            Request Membership
-          </button>
-        )}
-      </div>
+      <button onClick={doJoin} disabled={busy} data-testid="parish-join-btn" className="btn-primary inline-flex items-center gap-2">
+        {busy ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+        Join Parish
+      </button>
     </div>
   );
 }

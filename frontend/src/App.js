@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, Component } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -28,10 +28,30 @@ import { ensureServiceWorker } from "./lib/push";
 
 function Loader() {
   return (
-    <div className="min-h-screen grid place-items-center bg-[var(--bg-default)]">
-      <div className="font-display text-2xl text-[var(--brand-primary)]">Preparing your space…</div>
+    <div className="min-h-screen grid place-items-center" style={{ background: "#FDFBF7" }}>
+      <div style={{ fontFamily: "serif", fontSize: "1.4rem", color: "#0F1E38", opacity: 0.7 }}>Preparing your space…</div>
     </div>
   );
+}
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen grid place-items-center" style={{ background: "#FDFBF7", padding: "2rem", textAlign: "center" }}>
+          <div>
+            <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>✞</div>
+            <div style={{ fontFamily: "serif", fontSize: "1.4rem", color: "#0F1E38", marginBottom: "0.5rem" }}>Something went wrong</div>
+            <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1.5rem" }}>Please refresh the page or go back to continue.</p>
+            <button onClick={() => window.location.href = "/app"} style={{ background: "#0F1E38", color: "white", border: "none", padding: "0.6rem 1.5rem", borderRadius: "6px", cursor: "pointer", fontSize: "0.875rem" }}>Go Home</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function Protected({ children }) {
@@ -53,6 +73,7 @@ function AdminGate({ children }) {
 function App() {
   useEffect(() => { ensureServiceWorker(); }, []);
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <BrowserRouter>
         <Toaster richColors position="top-right" />
@@ -89,6 +110,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
