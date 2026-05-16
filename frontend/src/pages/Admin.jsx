@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -474,6 +474,112 @@ function ShepherdEndorsementManager() {
   );
 }
 
+function PrayerModerationManager() {
+  const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState({});
+
+  const load = () => {
+    setLoading(true);
+    http.get("/admin/prayers/moderation")
+      .then((r) => setQueue(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const act = async (pid, action) => {
+    setBusy((b) => ({ ...b, [pid]: action }));
+    try {
+      await http.patch(`/admin/prayers/${pid}`, { action });
+      toast.success(action === "remove" ? "Prayer removed" : action === "archive" ? "Prayer archived" : "Prayer restored");
+      load();
+    } catch (e) { toast.error(formatErr(e)); }
+    finally { setBusy((b) => { const n = { ...b }; delete n[pid]; return n; }); }
+  };
+
+  if (loading) return <div className="text-sm text-[var(--text-secondary)] animate-pulse">Loading moderation queue…</div>;
+
+  if (queue.length === 0) {
+    return (
+      <div className="card-surface p-8 text-center space-y-2">
+        <CheckCircle size={28} className="mx-auto text-emerald-500" />
+        <p className="font-display text-xl text-[var(--brand-primary)]">All clear</p>
+        <p className="text-sm text-[var(--text-secondary)]">No prayer requests have been reported.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-[var(--text-secondary)] flex items-center gap-2">
+        <AlertCircle size={15} className="text-amber-600" />
+        {queue.length} prayer request{queue.length !== 1 ? "s" : ""} flagged for review, sorted by report count.
+      </div>
+      {queue.map((p) => (
+        <div key={p.id} className="card-surface overflow-hidden" data-testid={`prayer-mod-${p.id}`}>
+          <div className="border-l-4 border-amber-400 px-5 py-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                    {p.report_count} report{p.report_count !== 1 ? "s" : ""}
+                  </span>
+                  <span className="text-xs text-[var(--text-tertiary)]">{p.scope === "parish" ? "Parish wall" : "Global wall"}</span>
+                  <span className={`text-xs font-semibold uppercase rounded-full px-2 py-0.5 border ${
+                    p.status === "removed" ? "bg-red-50 text-red-700 border-red-200" :
+                    p.status === "archived" ? "bg-gray-100 text-gray-500 border-gray-200" :
+                    "bg-blue-50 text-blue-700 border-blue-200"
+                  }`}>{p.status}</span>
+                </div>
+                <h4 className="font-display text-lg text-[var(--brand-primary)]">{p.title}</h4>
+                <p className="text-sm text-[var(--text-secondary)] mt-1 line-clamp-3">{p.body}</p>
+                <div className="text-xs text-[var(--text-tertiary)] mt-2">
+                  By {p.anonymous ? "Anonymous" : p.user_name} •
+                  Report reasons: <span className="text-amber-700">{[...new Set(p.report_reasons)].join(", ") || "none specified"}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 shrink-0">
+                {p.status !== "removed" && (
+                  <button
+                    onClick={() => act(p.id, "remove")}
+                    disabled={!!busy[p.id]}
+                    className="text-xs px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-1"
+                    data-testid={`prayer-remove-${p.id}`}
+                  >
+                    {busy[p.id] === "remove" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                    Remove
+                  </button>
+                )}
+                {p.status !== "archived" && p.status !== "removed" && (
+                  <button
+                    onClick={() => act(p.id, "archive")}
+                    disabled={!!busy[p.id]}
+                    className="text-xs px-3 py-1.5 rounded-md border border-amber-400 text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                    data-testid={`prayer-archive-${p.id}`}
+                  >
+                    Archive
+                  </button>
+                )}
+                {(p.status === "removed" || p.status === "archived") && (
+                  <button
+                    onClick={() => act(p.id, "restore")}
+                    disabled={!!busy[p.id]}
+                    className="text-xs px-3 py-1.5 rounded-md border border-emerald-400 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    data-testid={`prayer-restore-${p.id}`}
+                  >
+                    Restore
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const TABS = [
@@ -483,6 +589,7 @@ export default function Admin() {
     { k: "users", l: "Users & Roles", icon: Shield },
     { k: "endorsements", l: "Shepherd Endorsements", icon: ShieldCheck },
     { k: "moderation", l: "Moderation", icon: FileWarning },
+    { k: "prayer-mod", l: "Prayer Wall", icon: Heart },
     { k: "integrations", l: "Integrations", icon: Zap },
     { k: "audit", l: "Audit Log", icon: History },
   ];
@@ -505,6 +612,7 @@ export default function Admin() {
       {tab === "users" && <UsersManager />}
       {tab === "endorsements" && <ShepherdEndorsementManager />}
       {tab === "moderation" && <ModerationManager />}
+      {tab === "prayer-mod" && <PrayerModerationManager />}
       {tab === "integrations" && <IntegrationsManager />}
       {tab === "audit" && <AuditManager />}
     </div>

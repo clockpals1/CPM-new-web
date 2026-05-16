@@ -929,6 +929,119 @@ async def i_prayed(pid: str, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+@api.get("/prayers/{pid}")
+async def get_prayer(pid: str, user: dict = Depends(get_current_user)):
+    prayer = await db.prayer_requests.find_one({"id": pid}, {"_id": 0})
+    if not prayer:
+        raise HTTPException(404, "Prayer not found")
+    if prayer.get("scope") == "parish":
+        if not await _user_can_view_parish(user, prayer.get("parish_id", "")):
+            raise HTTPException(403, "Not a member of this parish")
+    already = await db.prayer_reactions.find_one({"prayer_id": pid, "user_id": user["id"]})
+    prayer["i_prayed"] = bool(already)
+    return prayer
+
+
+@api.get("/prayers/{pid}/comments")
+async def list_prayer_comments(pid: str, user: dict = Depends(get_current_user)):
+    comments = await db.prayer_comments.find({"prayer_id": pid}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return comments
+
+
+@api.post("/prayers/{pid}/comment")
+async def add_prayer_comment(pid: str, body: CommentIn, user: dict = Depends(get_current_user)):
+    prayer = await db.prayer_requests.find_one({"id": pid})
+    if not prayer:
+        raise HTTPException(404, "Prayer not found")
+    if prayer.get("status") in ["removed", "archived"]:
+        raise HTTPException(400, "Cannot comment on this prayer")
+    doc = {
+        "id": new_id(),
+        "prayer_id": pid,
+        "user_id": user["id"],
+        "user_name": user.get("name", ""),
+        "ccc_rank": user.get("ccc_rank", ""),
+        "body": body.body.strip(),
+        "created_at": iso(now_utc()),
+    }
+    await db.prayer_comments.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.post("/prayers/{pid}/answered")
+async def mark_prayer_answered(pid: str, body: dict, user: dict = Depends(get_current_user)):
+    prayer = await db.prayer_requests.find_one({"id": pid})
+    if not prayer:
+        raise HTTPException(404, "Prayer not found")
+    is_owner = prayer["user_id"] == user["id"]
+    is_admin = user.get("role") in ["super_admin", "parish_admin", "shepherd"]
+    if not is_owner and not is_admin:
+        raise HTTPException(403, "Not authorized")
+    testimony = body.get("testimony", "").strip()
+    await db.prayer_requests.update_one(
+        {"id": pid},
+        {"$set": {"status": "answered", "testimony": testimony, "answered_at": iso(now_utc())}},
+    )
+    return {"ok": True}
+
+
+@api.post("/prayers/{pid}/report")
+async def report_prayer(pid: str, body: dict, user: dict = Depends(get_current_user)):
+    prayer = await db.prayer_requests.find_one({"id": pid})
+    if not prayer:
+        raise HTTPException(404, "Prayer not found")
+    existing = await db.prayer_reports.find_one({"prayer_id": pid, "reporter_id": user["id"]})
+    if existing:
+        return {"ok": True, "already": True}
+    doc = {
+        "id": new_id(),
+        "prayer_id": pid,
+        "reporter_id": user["id"],
+        "reason": body.get("reason", ""),
+        "notes": body.get("notes", "").strip(),
+        "created_at": iso(now_utc()),
+    }
+    await db.prayer_reports.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/admin/prayers/moderation")
+async def prayer_moderation_queue(user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    reported_ids = await db.prayer_reports.distinct("prayer_id")
+    result = []
+    for pid in reported_ids:
+        prayer = await db.prayer_requests.find_one({"id": pid}, {"_id": 0})
+        if prayer:
+            reports = await db.prayer_reports.find({"prayer_id": pid}, {"_id": 0}).to_list(50)
+            report_count = len(reports)
+            reasons = [r.get("reason", "") for r in reports]
+            prayer["report_count"] = report_count
+            prayer["report_reasons"] = reasons
+            result.append(prayer)
+    result.sort(key=lambda x: x.get("report_count", 0), reverse=True)
+    return result
+
+
+@api.patch("/admin/prayers/{pid}")
+async def admin_moderate_prayer(pid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    action = body.get("action")
+    updates: dict = {"moderated_by": user["id"], "moderated_at": iso(now_utc())}
+    if action == "remove":
+        updates["status"] = "removed"
+    elif action == "archive":
+        updates["status"] = "archived"
+    elif action == "restore":
+        updates["status"] = "new"
+    else:
+        raise HTTPException(400, f"Unknown action: {action}")
+    await db.prayer_requests.update_one({"id": pid}, {"$set": updates})
+    if action == "remove":
+        await db.prayer_reports.update_many({"prayer_id": pid}, {"$set": {"resolved": True}})
+    return {"ok": True}
+
+
 # ---------------- Testimonies ----------------
 @api.post("/testimonies")
 async def create_testimony(body: TestimonyIn, user: dict = Depends(get_current_user)):
