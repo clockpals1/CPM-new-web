@@ -33,6 +33,15 @@ jobs:
           REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
           CI: ''        # prevent ESLint warnings from aborting the build
 
+      - name: SPA routing fallback — copy index.html to 404.html
+        working-directory: frontend
+        run: |
+          cp build/index.html build/404.html
+          echo "/* /index.html 200" > build/_redirects
+          printf '/*\n  Cache-Control: no-store\n  X-Content-Type-Options: nosniff\n' > build/_headers
+          echo "Routing files ready:"
+          ls -la build/_redirects build/404.html build/_headers
+
       - name: Create Cloudflare Pages project (if not exists)
         working-directory: frontend
         run: npx wrangler pages project create cpm --production-branch main || true

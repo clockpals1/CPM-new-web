@@ -28,68 +28,91 @@ const QUICK_ACTIONS = [
 // ─── No parish state ──────────────────────────────────────────────────────────
 function NoParishState() {
   return (
-    <div className="max-w-2xl mx-auto" data-testid="no-parish-state">
-      <div className="card-surface p-10 sm:p-16 text-center space-y-5">
-        <div className="w-20 h-20 rounded-full bg-[var(--bg-subtle)] grid place-items-center mx-auto">
-          <Church size={36} className="text-[var(--brand-accent)]" />
+    <div className="max-w-2xl mx-auto space-y-5" data-testid="no-parish-state">
+      {/* Hero */}
+      <div className="card-surface overflow-hidden">
+        <div className="h-2 bg-gradient-to-r from-[var(--brand-primary)] via-[var(--brand-accent)] to-[var(--brand-primary)]" />
+        <div className="p-8 sm:p-12 text-center space-y-4">
+          <div className="w-20 h-20 rounded-2xl bg-[var(--brand-primary)] grid place-items-center mx-auto shadow-lg">
+            <Church size={36} className="text-[var(--brand-accent)]" />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-2">Welcome</div>
+            <h2 className="font-display text-3xl sm:text-4xl text-[var(--brand-primary)]">Find your parish home</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-3 max-w-md mx-auto leading-relaxed">
+              Join a Celestial Church of Christ parish near you. You’ll be welcomed as a full member instantly — no waiting, no approval needed.
+            </p>
+          </div>
+          <Link
+            to="/app/parishes"
+            className="btn-primary inline-flex items-center gap-2 px-8 py-3 text-sm mx-auto"
+            data-testid="myparish-find"
+          >
+            <Navigation size={15} /> Browse Parishes <ArrowRight size={14} />
+          </Link>
         </div>
-        <div>
-          <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-2">Alleluia</div>
-          <h2 className="font-display text-3xl text-[var(--brand-primary)]">Welcome, beloved</h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-3 max-w-md mx-auto leading-relaxed">
-            You have not joined a parish yet. Find a Celestial Church of Christ parish near you to worship, connect, and grow in your faith community.
-          </p>
-        </div>
-        <Link to="/app/parishes" className="btn-primary inline-flex items-center gap-2 px-7 py-3 text-sm" data-testid="myparish-find">
-          <Navigation size={15} /> Find a Parish <ArrowRight size={14} />
-        </Link>
-        <p className="text-xs text-[var(--text-tertiary)]">You may belong to up to 2 parishes at once.</p>
+      </div>
+
+      {/* Steps */}
+      <div className="grid sm:grid-cols-3 gap-3">
+        {[
+          { num: "1", title: "Find a parish", desc: "Search by country, city, or name — worldwide." },
+          { num: "2", title: "Click Join", desc: "One tap and you're in. Membership is instant." },
+          { num: "3", title: "Connect & grow", desc: "Access the parish feed, events, prayer wall and more." },
+        ].map(({ num, title, desc }) => (
+          <div key={num} className="card-surface p-5 flex gap-4 items-start">
+            <div className="w-8 h-8 rounded-full bg-[var(--brand-primary)] text-[var(--brand-accent)] grid place-items-center font-display text-lg flex-shrink-0">{num}</div>
+            <div>
+              <div className="font-medium text-sm text-[var(--brand-primary)]">{title}</div>
+              <div className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">{desc}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ─── Pending-only state ───────────────────────────────────────────────────────
+// ─── Pending-only state (invite-only parishes) ────────────────────────────────
 function PendingOnlyState({ pending, onRefresh }) {
   return (
     <div className="max-w-2xl mx-auto space-y-4" data-testid="pending-only-state">
-      <div className="card-surface p-8 text-center space-y-4">
-        <div className="w-16 h-16 rounded-full bg-amber-50 grid place-items-center mx-auto">
-          <Clock size={26} className="text-amber-600" />
+      <div className="card-surface p-8 space-y-5">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-xl bg-amber-50 border border-amber-100 grid place-items-center flex-shrink-0">
+            <Clock size={24} className="text-amber-600" />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-[0.22em] text-amber-600 mb-1">Invite-only parish</div>
+            <h2 className="font-display text-2xl text-[var(--brand-primary)]">Awaiting shepherd confirmation</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">
+              This parish requires shepherd approval. You’ll receive a notification the moment you’re confirmed.
+            </p>
+          </div>
         </div>
-        <div>
-          <div className="text-xs uppercase tracking-[0.22em] text-amber-600 mb-2">Pending approval</div>
-          <h2 className="font-display text-2xl text-[var(--brand-primary)]">Your request is under review</h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-2 max-w-sm mx-auto">
-            The parish shepherd or admin will review your membership request. You will receive a notification once approved.
-          </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={onRefresh} className="btn-primary text-sm inline-flex items-center gap-1.5">
+            <RefreshCw size={13} /> Check for update
+          </button>
+          <Link to="/app/parishes" className="text-sm text-[var(--brand-accent)] hover:underline inline-flex items-center gap-1">
+            <Navigation size={13} /> Join another parish instead
+          </Link>
         </div>
-        <button onClick={onRefresh} className="text-sm text-[var(--brand-accent)] hover:underline inline-flex items-center gap-1">
-          <RefreshCw size={13} /> Refresh status
-        </button>
       </div>
       {pending.map((m) => (
-        <div key={m.id} className="card-surface p-5 flex items-start gap-3" data-testid={`pending-card-${m.id}`}>
-          <div className="w-10 h-10 rounded-lg bg-[var(--bg-subtle)] grid place-items-center flex-shrink-0">
+        <div key={m.id} className="card-surface p-5 flex items-center gap-4" data-testid={`pending-card-${m.id}`}>
+          <div className="w-10 h-10 rounded-xl bg-[var(--bg-subtle)] grid place-items-center flex-shrink-0">
             <Church size={18} className="text-[var(--brand-primary)]" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-display text-lg text-[var(--brand-primary)]">{m.parish?.name || "Parish"}</div>
+            <div className="font-semibold text-sm text-[var(--brand-primary)]">{m.parish?.name || "Parish"}</div>
             <div className="text-xs text-[var(--text-tertiary)] flex items-center gap-1 mt-0.5">
               <MapPin size={10} /> {[m.parish?.city, m.parish?.country].filter(Boolean).join(", ")}
             </div>
-            <div className="text-xs text-amber-600 font-medium mt-1.5 flex items-center gap-1">
-              <Info size={11} /> Request submitted {new Date(m.created_at).toLocaleDateString()}
-            </div>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 font-semibold uppercase tracking-widest flex-shrink-0">Pending</span>
+          <span className="text-[10px] px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700 font-semibold uppercase tracking-widest">Pending</span>
         </div>
       ))}
-      <div className="text-center pt-1">
-        <Link to="/app/parishes" className="text-sm text-[var(--brand-accent)] hover:underline inline-flex items-center gap-1">
-          <Navigation size={13} /> Browse other parishes
-        </Link>
-      </div>
     </div>
   );
 }

@@ -1860,6 +1860,30 @@ async def on_startup():
         {"$set": {"join_mode": "open"}}
     )
 
+    # Migrate orphaned onboarding joins from wrong collection → parish_memberships (approved)
+    orphaned_reqs = await db.parish_membership_requests.find(
+        {"note": "Onboarding request"}, {"_id": 0}
+    ).to_list(None)
+    migrated_count = 0
+    for req in orphaned_reqs:
+        exists = await db.parish_memberships.find_one(
+            {"user_id": req["user_id"], "parish_id": req["parish_id"]}
+        )
+        if not exists:
+            await db.parish_memberships.insert_one({
+                "id": req.get("id", new_id()),
+                "user_id": req["user_id"],
+                "parish_id": req["parish_id"],
+                "status": "approved",
+                "approved_at": req.get("created_at", iso(now_utc())),
+                "note": "Migrated from onboarding request",
+                "join_mode_used": "onboarding_migrated",
+                "created_at": req.get("created_at", iso(now_utc())),
+            })
+            migrated_count += 1
+    if migrated_count:
+        print(f"[startup] Migrated {migrated_count} orphaned onboarding parish joins to approved memberships")
+
     # seed users
     admin_email = os.environ["ADMIN_EMAIL"]
     admin_password = os.environ["ADMIN_PASSWORD"]
