@@ -33,47 +33,9 @@ jobs:
           REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
           CI: ''        # prevent ESLint warnings from aborting the build
 
-      - name: Verify SPA Worker is in build output
+      - name: Deploy to Cloudflare Workers
         working-directory: frontend
-        run: |
-          echo "--- SPA routing files ---"
-          ls -la build/_worker.js build/_redirects 2>/dev/null || true
-          echo "--- _worker.js preview ---"
-          head -6 build/_worker.js
-
-      - name: List all Cloudflare Pages projects (find the live one)
-        working-directory: frontend
-        run: |
-          echo "=== All Cloudflare Pages projects in this account ==="
-          npx wrangler pages project list 2>&1 || echo "Could not list projects"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Deploy to Cloudflare Pages (all likely project names)
-        working-directory: frontend
-        run: |
-          SHORT=$(git rev-parse --short HEAD)
-          DEPLOY_ARGS="build --branch main --commit-dirty=true --commit-message Deploy-${SHORT}"
-          deployed=0
-
-          for PROJECT in cpm cpm-new-web cpmnewweb celestialpeoplemeet cpm-web; do
-            echo ""
-            echo "--- Trying project: $PROJECT ---"
-            if npx wrangler pages deploy $DEPLOY_ARGS --project-name "$PROJECT" 2>&1; then
-              echo "SUCCESS: deployed to $PROJECT"
-              deployed=$((deployed + 1))
-            else
-              echo "SKIP: $PROJECT not found or failed"
-            fi
-          done
-
-          echo ""
-          echo "=== Deployed to $deployed project(s) ==="
-          if [ "$deployed" -eq 0 ]; then
-            echo "ERROR: No project accepted the deployment."
-            exit 1
-          fi
+        run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
