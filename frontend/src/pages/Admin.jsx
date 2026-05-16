@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw, ExternalLink, Star } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw, ExternalLink, Star, CheckCircle2, XCircle, Clock, Info, ChevronDown, UserCog } from "lucide-react";
 import { toast } from "sonner";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 const KEYS = [
   { key: "ccc_ranks", label: "CCC Ranks & Titles" },
@@ -258,6 +259,7 @@ function UsersManager() {
   const [users, setUsers] = useState([]);
   const [parishes, setParishes] = useState([]);
   const [badges, setBadges] = useState([]);
+  const [verifyReasonMap, setVerifyReasonMap] = useState({});
   const load = () => http.get("/admin/users").then((r) => setUsers(r.data));
   useEffect(() => {
     load();
@@ -266,28 +268,227 @@ function UsersManager() {
   }, []);
   const setRole = async (uid, role, parish_id) => { try { await http.post(`/admin/users/${uid}/role`, { role, parish_id }); toast.success("Role updated"); load(); } catch (e) { toast.error(formatErr(e)); } };
   const awardBadge = async (uid, badge) => { try { await http.post(`/admin/users/${uid}/badge`, { badge }); toast.success("Badge awarded"); load(); } catch (e) { toast.error(formatErr(e)); } };
+  const verify = async (uid) => {
+    const reason = verifyReasonMap[uid] || "Verified by Super Admin";
+    try { await http.post(`/admin/users/${uid}/verify`, { reason }); toast.success("Verified"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+  const unverify = async (uid) => {
+    try { await http.delete(`/admin/users/${uid}/verify`); toast.success("Verification removed"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
   return (
     <div className="space-y-3">
       {users.map((u) => (
-        <div key={u.id} className="card-surface p-4 text-sm flex flex-wrap items-center gap-3" data-testid={`user-${u.id}`}>
-          <div className="flex-1 min-w-[180px]">
-            <div className="font-medium text-[var(--brand-primary)]">{u.name}</div>
-            <div className="text-xs text-[var(--text-tertiary)]">{u.email} • {u.ccc_rank} • {u.country}</div>
-            {u.badges?.length > 0 && <div className="text-[10px] mt-1 text-[var(--brand-accent)]">{u.badges.join(" • ")}</div>}
+        <div key={u.id} className="card-surface p-4 text-sm" data-testid={`user-${u.id}`}>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[180px]">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-[var(--brand-primary)]">{u.name}</span>
+                {u.verified && <VerifiedBadge size="xs" reason={u.verified_reason} />}
+              </div>
+              <div className="text-xs text-[var(--text-tertiary)]">{u.email} • {u.ccc_rank} • {u.country}</div>
+              {u.badges?.length > 0 && <div className="text-[10px] mt-1 text-[var(--brand-accent)]">{u.badges.join(" • ")}</div>}
+            </div>
+            <select defaultValue={u.role} onChange={(e) => setRole(u.id, e.target.value, u.assigned_parish_id)} className="input-clean text-xs max-w-[180px]" data-testid={`role-${u.id}`}>
+              {["member", "moderator", "shepherd", "parish_admin", "super_admin"].map((r) => (<option key={r} value={r}>{r}</option>))}
+            </select>
+            <select defaultValue={u.assigned_parish_id || ""} onChange={(e) => setRole(u.id, u.role, e.target.value)} className="input-clean text-xs max-w-[200px]">
+              <option value="">No parish assigned</option>
+              {parishes.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+            </select>
+            <select onChange={(e) => e.target.value && awardBadge(u.id, e.target.value)} defaultValue="" className="input-clean text-xs max-w-[180px]" data-testid={`badge-select-${u.id}`}>
+              <option value="">Award badge…</option>
+              {badges.map((b) => (<option key={b.id} value={b.label}>{b.label}</option>))}
+            </select>
           </div>
-          <select defaultValue={u.role} onChange={(e) => setRole(u.id, e.target.value, u.assigned_parish_id)} className="input-clean text-xs max-w-[180px]" data-testid={`role-${u.id}`}>
-            {["member", "moderator", "shepherd", "parish_admin", "super_admin"].map((r) => (<option key={r} value={r}>{r}</option>))}
-          </select>
-          <select defaultValue={u.assigned_parish_id || ""} onChange={(e) => setRole(u.id, u.role, e.target.value)} className="input-clean text-xs max-w-[200px]">
-            <option value="">No parish assigned</option>
-            {parishes.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-          </select>
-          <select onChange={(e) => e.target.value && awardBadge(u.id, e.target.value)} defaultValue="" className="input-clean text-xs max-w-[180px]" data-testid={`badge-select-${u.id}`}>
-            <option value="">Award badge…</option>
-            {badges.map((b) => (<option key={b.id} value={b.label}>{b.label}</option>))}
-          </select>
+          {/* Verification controls */}
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[var(--border-default)]">
+            <span className="text-xs text-[var(--text-tertiary)] font-semibold uppercase tracking-wide">Verified badge:</span>
+            {u.verified ? (
+              <>
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 size={11} /> Verified{u.verified_reason ? ` · ${u.verified_reason}` : ""}</span>
+                <button onClick={() => unverify(u.id)} className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50" data-testid={`unverify-${u.id}`}>Remove</button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  className="input-clean text-xs max-w-[220px]"
+                  placeholder="Verification reason (optional)"
+                  value={verifyReasonMap[u.id] || ""}
+                  onChange={(e) => setVerifyReasonMap((m) => ({ ...m, [u.id]: e.target.value }))}
+                  data-testid={`verify-reason-${u.id}`}
+                />
+                <button onClick={() => verify(u.id)} className="text-xs px-2.5 py-1 rounded-md border border-emerald-300 text-emerald-700 hover:bg-emerald-50 inline-flex items-center gap-1" data-testid={`verify-btn-${u.id}`}>
+                  <CheckCircle2 size={11} /> Verify
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Parish Admin Requests Manager ───────────────────────────────────────────
+const REQ_STATUS_META = {
+  pending:    { label: "Pending",          color: "bg-amber-50 text-amber-700 border-amber-200" },
+  approved:   { label: "Approved",         color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  rejected:   { label: "Rejected",         color: "bg-red-50 text-red-700 border-red-200" },
+  needs_info: { label: "More Info Needed", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  deferred:   { label: "Deferred",         color: "bg-gray-100 text-gray-600 border-gray-200" },
+};
+
+function ParishAdminRequestsManager() {
+  const [requests, setRequests] = useState([]);
+  const [filter, setFilter] = useState("pending");
+  const [loading, setLoading] = useState(true);
+  const [reviewNote, setReviewNote] = useState({});
+  const [busy, setBusy] = useState({});
+
+  const load = (s) => {
+    setLoading(true);
+    const params = s && s !== "all" ? { status: s } : {};
+    http.get("/admin/parish-admin-requests", { params })
+      .then((r) => setRequests(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(filter); }, [filter]);
+
+  const review = async (rid, action) => {
+    setBusy((b) => ({ ...b, [rid]: action }));
+    try {
+      const note = reviewNote[rid] || "";
+      await http.post(`/admin/parish-admin-requests/${rid}/review`, { action, note });
+      const labels = { approve: "Approved", reject: "Rejected", needs_info: "Needs info sent", defer: "Deferred" };
+      toast.success(labels[action] || "Done");
+      load(filter);
+    } catch (e) { toast.error(formatErr(e)); }
+    finally { setBusy((b) => { const n = { ...b }; delete n[rid]; return n; }); }
+  };
+
+  const FILTERS = ["all", "pending", "approved", "rejected", "needs_info", "deferred"];
+
+  return (
+    <div className="space-y-5">
+      {/* Status filter tabs */}
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map((s) => (
+          <button key={s} onClick={() => setFilter(s)}
+            className={`px-3 py-1.5 rounded-md border text-xs capitalize transition-colors ${
+              filter === s ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)] text-[var(--text-secondary)]"
+            }`}>
+            {s === "all" ? "All" : REQ_STATUS_META[s]?.label || s}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-2 animate-pulse">{[1,2,3].map((n) => <div key={n} className="card-surface h-24 rounded-xl" />)}</div>
+      ) : requests.length === 0 ? (
+        <div className="card-surface p-10 text-center">
+          <CheckCircle2 size={28} className="mx-auto text-emerald-500 mb-2" />
+          <p className="text-sm text-[var(--text-secondary)]">No requests in this category.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {requests.map((r) => {
+            const meta = REQ_STATUS_META[r.status] || REQ_STATUS_META.pending;
+            return (
+              <div key={r.id} className="card-surface overflow-hidden" data-testid={`par-req-${r.id}`}>
+                <div className="border-l-4 border-[var(--brand-accent)] px-5 py-4 space-y-3">
+                  {/* Request header */}
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-medium text-[var(--brand-primary)]">{r.user_name}</span>
+                        {r.ccc_rank && <span className="text-xs text-[var(--brand-accent)]">{r.ccc_rank}</span>}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
+                      </div>
+                      <div className="text-xs text-[var(--text-tertiary)]">{r.user_email} · {new Date(r.created_at).toLocaleDateString()}</div>
+                      <div className="text-sm font-medium text-[var(--brand-primary)] mt-1">Parish: {r.parish_name || r.parish_id}</div>
+                    </div>
+                  </div>
+
+                  {/* Request body */}
+                  <div className="space-y-2">
+                    <div>
+                      <div className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-0.5">Why they want to be Parish Admin</div>
+                      <p className="text-sm text-[var(--text-secondary)]">{r.reason}</p>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-0.5">Request note</div>
+                      <p className="text-sm text-[var(--text-secondary)]">{r.note}</p>
+                    </div>
+                    {r.comments && (
+                      <div>
+                        <div className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-0.5">Supporting comments</div>
+                        <p className="text-sm text-[var(--text-secondary)]">{r.comments}</p>
+                      </div>
+                    )}
+                    {r.review_note && (
+                      <div className={`rounded-lg px-3 py-2 text-xs border ${meta.color}`}>
+                        <span className="font-semibold">Previous review note: </span>{r.review_note}
+                        {r.reviewer_name && <span className="text-[var(--text-tertiary)] ml-1">— {r.reviewer_name}</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Review actions (only for pending or needs_info) */}
+                  {(r.status === "pending" || r.status === "needs_info" || r.status === "deferred") && (
+                    <div className="pt-2 border-t border-[var(--border-default)] space-y-2">
+                      <input
+                        type="text"
+                        className="input-clean text-sm"
+                        placeholder="Review note (shown to member — required for reject/needs_info)"
+                        value={reviewNote[r.id] || ""}
+                        onChange={(e) => setReviewNote((m) => ({ ...m, [r.id]: e.target.value }))}
+                        data-testid={`review-note-${r.id}`}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => review(r.id, "approve")}
+                          disabled={!!busy[r.id]}
+                          className="btn-primary text-xs inline-flex items-center gap-1"
+                          data-testid={`approve-req-${r.id}`}
+                        >
+                          {busy[r.id] === "approve" ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />} Approve
+                        </button>
+                        <button
+                          onClick={() => review(r.id, "needs_info")}
+                          disabled={!!busy[r.id]}
+                          className="text-xs px-3 py-1.5 rounded-md border border-blue-300 text-blue-700 hover:bg-blue-50"
+                          data-testid={`needs-info-req-${r.id}`}
+                        >
+                          {busy[r.id] === "needs_info" ? <Loader2 size={11} className="animate-spin" /> : <Info size={11} />} Needs Info
+                        </button>
+                        <button
+                          onClick={() => review(r.id, "defer")}
+                          disabled={!!busy[r.id]}
+                          className="text-xs px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+                          data-testid={`defer-req-${r.id}`}
+                        >
+                          {busy[r.id] === "defer" ? <Loader2 size={11} className="animate-spin" /> : <Clock size={11} />} Defer
+                        </button>
+                        <button
+                          onClick={() => review(r.id, "reject")}
+                          disabled={!!busy[r.id]}
+                          className="text-xs px-3 py-1.5 rounded-md border border-red-200 text-red-600 hover:bg-red-50"
+                          data-testid={`reject-req-${r.id}`}
+                        >
+                          {busy[r.id] === "reject" ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />} Reject
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1410,28 +1611,32 @@ function CPMWaveManager() {
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const TABS = [
-    { k: "settings", l: "Settings & Catalog", icon: BadgeCheck },
-    { k: "parish-import", l: "Parish Import", icon: Upload },
-    { k: "ranks-import", l: "Ranks & Catalogs Import", icon: Download },
-    { k: "parishes", l: "Parishes", icon: Plus },
-    { k: "approvals", l: "Approvals", icon: BadgeCheck },
-    { k: "users", l: "Users & Roles", icon: Shield },
-    { k: "endorsements", l: "Shepherd Endorsements", icon: ShieldCheck },
-    { k: "moderation", l: "Moderation", icon: FileWarning },
-    { k: "prayer-mod", l: "Prayer Wall", icon: Heart },
-    { k: "choir-hub", l: "Choir Hub", icon: Music },
-    { k: "ai-knowledge", l: "AI Knowledge Base", icon: Bot },
-    { k: "hymns", l: "CCC Hymns", icon: BookOpen },
-    { k: "daily-posts", l: "Daily Posts", icon: Sparkles },
-    { k: "cpmwave", l: "CPM Wave", icon: Music },
-    { k: "integrations", l: "Integrations", icon: Zap },
-    { k: "audit", l: "Audit Log", icon: History },
+    { k: "settings",       l: "Settings & Catalog",        icon: BadgeCheck },
+    { k: "parish-import",  l: "Parish Import",             icon: Upload },
+    { k: "ranks-import",   l: "Ranks & Catalogs Import",   icon: Download },
+    { k: "parishes",       l: "Parishes",                  icon: Plus },
+    { k: "approvals",      l: "Approvals",                 icon: BadgeCheck },
+    { k: "parish-admin-requests", l: "Parish Admin Requests", icon: UserCog },
+    { k: "users",          l: "Users & Roles",             icon: Shield },
+    { k: "endorsements",   l: "Shepherd Endorsements",     icon: ShieldCheck },
+    { k: "moderation",     l: "Moderation",                icon: FileWarning },
+    { k: "prayer-mod",     l: "Prayer Wall",               icon: Heart },
+    { k: "choir-hub",      l: "Choir Hub",                 icon: Music },
+    { k: "ai-knowledge",   l: "AI Knowledge Base",         icon: Bot },
+    { k: "hymns",          l: "CCC Hymns",                 icon: BookOpen },
+    { k: "daily-posts",    l: "Daily Posts",               icon: Sparkles },
+    { k: "cpmwave",        l: "CPM Wave",                  icon: Music },
+    { k: "integrations",   l: "Integrations",              icon: Zap },
+    { k: "audit",          l: "Audit Log",                 icon: History },
   ];
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)]">Administration</div>
         <h1 className="font-display text-3xl sm:text-4xl text-[var(--brand-primary)]">Admin Console</h1>
+        <p className="text-sm text-[var(--text-secondary)] mt-1 max-w-lg">
+          Super Admin is the current approval authority for all parish, choir, and member verification flows.
+        </p>
       </div>
       <div className="flex gap-2 flex-wrap">
         {TABS.map((t) => (
@@ -1445,6 +1650,7 @@ export default function Admin() {
       {tab === "ranks-import" && <SettingsImportManager />}
       {tab === "parishes" && <ParishesManager />}
       {tab === "approvals" && <ApprovalsManager />}
+      {tab === "parish-admin-requests" && <ParishAdminRequestsManager />}
       {tab === "users" && <UsersManager />}
       {tab === "endorsements" && <ShepherdEndorsementManager />}
       {tab === "moderation" && <ModerationManager />}

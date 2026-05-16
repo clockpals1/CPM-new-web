@@ -6,6 +6,7 @@ import {
   Music, HandHelping, Shield, ChevronDown, ChevronUp, Star, Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 const PRIVACY_OPTS = [
   { v: "public", l: "Public" },
@@ -141,7 +142,10 @@ export default function Profile() {
       <div className="card-surface p-6 flex items-start gap-5 flex-wrap">
         <AvatarUploader currentAvatar={user?.avatar} name={user?.name} onUploaded={() => refresh()} />
         <div className="flex-1 min-w-0 space-y-1">
-          <div className="font-display text-2xl text-[var(--brand-primary)]">{form.name || user?.name}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-display text-2xl text-[var(--brand-primary)]">{form.name || user?.name}</div>
+            {user?.verified && <VerifiedBadge size="sm" reason={user?.verified_reason} />}
+          </div>
           {form.ccc_rank && <div className="text-sm text-[var(--brand-accent)] font-medium">{form.ccc_rank}</div>}
           {(form.country || form.city) && (
             <div className="text-xs text-[var(--text-tertiary)] flex items-center gap-1">

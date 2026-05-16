@@ -310,6 +310,13 @@ class ProfileUpdateIn(BaseModel):
     directory_visible: Optional[bool] = True
 
 
+class ParishAdminReqIn(BaseModel):
+    parish_id: str
+    note: str                        # request note / message
+    reason: str                      # why they want to be parish admin
+    comments: Optional[str] = ""    # any supporting details
+
+
 # ---------------- Auth Routes ----------------
 @api.post("/auth/register")
 async def register(req: RegisterReq, response: Response):
@@ -1830,6 +1837,149 @@ async def admin_set_role(uid: str, body: dict, actor: dict = Depends(require_rol
         "created_at": iso(now_utc()),
     })
     return {"ok": True}
+
+
+@api.post("/admin/users/{uid}/verify")
+async def verify_member(uid: str, body: dict = {}, actor: dict = Depends(require_roles("super_admin"))):
+    """Assign the verified badge to a member."""
+    reason = (body or {}).get("reason", "Verified by Super Admin")
+    await db.users.update_one(
+        {"id": uid},
+        {"$set": {"verified": True, "verified_reason": reason, "verified_at": iso(now_utc()), "verified_by": actor["id"]}},
+    )
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "user_verified", "target": uid, "details": {"reason": reason},
+        "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+@api.delete("/admin/users/{uid}/verify")
+async def unverify_member(uid: str, actor: dict = Depends(require_roles("super_admin"))):
+    """Remove the verified badge from a member."""
+    await db.users.update_one(
+        {"id": uid},
+        {"$unset": {"verified": "", "verified_reason": "", "verified_at": "", "verified_by": ""}},
+    )
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "user_unverified", "target": uid, "details": {},
+        "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
+# ── Parish Admin Requests ─────────────────────────────────────────────────────
+@api.post("/me/parish-admin-request")
+async def submit_parish_admin_request(body: ParishAdminReqIn, user: dict = Depends(get_current_user)):
+    """Member submits a request to become parish admin for a specific parish."""
+    existing = await db.parish_admin_requests.find_one({
+        "user_id": user["id"], "parish_id": body.parish_id,
+        "status": {"$in": ["pending", "approved"]},
+    })
+    if existing:
+        raise HTTPException(400, "You already have a pending or approved request for this parish")
+    parish = await db.parishes.find_one({"id": body.parish_id}, {"_id": 0, "name": 1})
+    doc = {
+        "id": new_id(),
+        "user_id": user["id"],
+        "user_name": user.get("name"),
+        "user_email": user.get("email"),
+        "ccc_rank": user.get("ccc_rank"),
+        "parish_id": body.parish_id,
+        "parish_name": parish.get("name") if parish else None,
+        "note": body.note,
+        "reason": body.reason,
+        "comments": body.comments or "",
+        "status": "pending",          # pending | approved | rejected | needs_info | deferred
+        "reviewed_by": None,
+        "reviewer_name": None,
+        "review_note": None,
+        "created_at": iso(now_utc()),
+        "reviewed_at": None,
+    }
+    await db.parish_admin_requests.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/me/parish-admin-requests")
+async def my_parish_admin_requests(user: dict = Depends(get_current_user)):
+    """Return the authenticated member's own parish admin requests."""
+    reqs = await db.parish_admin_requests.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(20)
+    return reqs
+
+
+@api.get("/admin/parish-admin-requests")
+async def admin_list_parish_admin_requests(
+    status: Optional[str] = None,
+    actor: dict = Depends(require_roles("super_admin")),
+):
+    """Super Admin — list all parish admin requests, optionally filtered by status."""
+    flt: dict = {}
+    if status:
+        flt["status"] = status
+    reqs = await db.parish_admin_requests.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return reqs
+
+
+@api.post("/admin/parish-admin-requests/{rid}/review")
+async def admin_review_parish_admin_request(
+    rid: str, body: dict, actor: dict = Depends(require_roles("super_admin"))
+):
+    """Super Admin reviews a parish admin request: approve | reject | needs_info | defer."""
+    action = (body or {}).get("action")
+    review_note = (body or {}).get("note", "")
+    if action not in ("approve", "reject", "needs_info", "defer"):
+        raise HTTPException(400, "action must be one of: approve | reject | needs_info | defer")
+    req = await db.parish_admin_requests.find_one({"id": rid})
+    if not req:
+        raise HTTPException(404, "Request not found")
+    status_map = {"approve": "approved", "reject": "rejected", "needs_info": "needs_info", "defer": "deferred"}
+    new_status = status_map[action]
+    await db.parish_admin_requests.update_one({"id": rid}, {"$set": {
+        "status": new_status,
+        "reviewed_by": actor["id"],
+        "reviewer_name": actor.get("name"),
+        "review_note": review_note,
+        "reviewed_at": iso(now_utc()),
+    }})
+    uid = req["user_id"]
+    if action == "approve":
+        await db.users.update_one(
+            {"id": uid},
+            {"$set": {"role": "parish_admin", "assigned_parish_id": req["parish_id"]}},
+        )
+        await db.notifications.insert_one({
+            "id": new_id(), "user_id": uid,
+            "title": "Parish Admin Request Approved",
+            "body": f"Your request to manage {req.get('parish_name', 'the parish')} has been approved. Welcome, Parish Admin!",
+            "category": "admin", "read": False, "created_at": iso(now_utc()),
+        })
+        await db.audit_logs.insert_one({
+            "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+            "action": "parish_admin_approved", "target": uid,
+            "details": {"parish_id": req["parish_id"], "user_name": req.get("user_name")},
+            "created_at": iso(now_utc()),
+        })
+    elif action == "reject":
+        await db.notifications.insert_one({
+            "id": new_id(), "user_id": uid,
+            "title": "Parish Admin Request — Not Approved",
+            "body": f"Your parish admin request was not approved. {('Reason: ' + review_note) if review_note else 'Please contact Super Admin for details.'}",
+            "category": "admin", "read": False, "created_at": iso(now_utc()),
+        })
+    elif action == "needs_info":
+        await db.notifications.insert_one({
+            "id": new_id(), "user_id": uid,
+            "title": "Parish Admin Request — More Info Needed",
+            "body": review_note or "Super Admin requires more information about your Parish Admin application.",
+            "category": "admin", "read": False, "created_at": iso(now_utc()),
+        })
+    return {"ok": True, "status": new_status}
 
 
 # ---------------- Moderation / Reports ----------------

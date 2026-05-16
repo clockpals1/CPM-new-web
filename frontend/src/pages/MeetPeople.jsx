@@ -6,6 +6,7 @@ import {
   X, Flag, ShieldBan, Music, HandHelping, BadgeCheck, Users, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function Avatar({ member, size = 12 }) {
   const cls = `w-${size} h-${size} rounded-full overflow-hidden flex items-center justify-center font-display text-white shrink-0`;
@@ -58,6 +59,7 @@ function MemberCard({ m, currentUser, onMessage, onProfileOpen }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-medium text-[var(--brand-primary)] truncate">{m.name}</span>
+            {m.verified && <VerifiedBadge size="xs" reason={m.verified_reason} />}
             {m.badges?.length > 0 && <BadgeCheck size={13} className="text-[var(--brand-accent)] shrink-0" />}
           </div>
           {m.ccc_rank && <div className="text-xs text-[var(--brand-accent)] font-medium">{m.ccc_rank}</div>}
@@ -143,7 +145,10 @@ function ProfileModal({ member, onClose, currentUser }) {
           <div className="flex items-start gap-4">
             <Avatar member={p} size={16} />
             <div className="flex-1 min-w-0">
-              <div className="font-display text-2xl text-[var(--brand-primary)]">{p.name}</div>
+              <div className="flex items-center gap-2">
+                <div className="font-display text-2xl text-[var(--brand-primary)]">{p.name}</div>
+                {p.verified && <VerifiedBadge size="sm" reason={p.verified_reason} />}
+              </div>
               {p.ccc_rank && <div className="text-sm text-[var(--brand-accent)] font-medium">{p.ccc_rank}</div>}
               <div className="text-xs text-[var(--text-tertiary)] flex items-center gap-1 mt-1">
                 <MapPin size={11} /> {[p.city, p.country].filter(Boolean).join(", ") || "—"}
