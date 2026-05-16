@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  MapPin, Heart, Users, Globe2, Music2, Briefcase,
+  MapPin, Heart, Users, Globe, Music, Briefcase,
   HandHeart, MessageSquare, Star, ChevronRight, Shield,
 } from "lucide-react";
 
@@ -11,14 +11,14 @@ const CHOIR_IMG = "https://images.unsplash.com/photo-1720186576697-24c1496a07e1?
 
 const VALUE_CARDS = [
   { icon: MapPin,        title: "Find a parish near you",       desc: "Search by country or city — worldwide." },
-  { icon: Globe2,        title: "Get directions to worship",    desc: "Every parish has an address. Never miss a Sunday." },
+  { icon: Globe,         title: "Get directions to worship",    desc: "Every parish has an address. Never miss a Sunday." },
   { icon: Users,         title: "Join your parish digitally",   desc: "Request membership, get approved, belong." },
   { icon: Heart,         title: "Share prayers & testimonies",  desc: "Global wall or just your parish — your choice." },
 ];
 
 const FEATURE_ROWS = [
   { icon: MessageSquare, title: "Direct messages",      desc: "Private, reverential DMs between brethren." },
-  { icon: Music2,        title: "Choir groups",         desc: "Join and manage your parish choir online." },
+  { icon: Music,        title: "Choir groups",         desc: "Join and manage your parish choir online." },
   { icon: HandHeart,     title: "Service teams",        desc: "Ushering, media, welfare — sign up digitally." },
   { icon: Briefcase,     title: "Careers board",        desc: "Celestial jobs and opportunities, worldwide." },
   { icon: Star,          title: "Verified badges",      desc: "Parish admins award trust badges to members." },
@@ -182,7 +182,7 @@ export default function Landing() {
             {[
               { icon: Heart,          title: "Prayer Wall",   desc: "Post requests privately or globally. Brethren pray along with you." },
               { icon: Star,           title: "Testimonies",   desc: "Share answered prayers and spiritual victories with the family." },
-              { icon: Globe2,         title: "Global Feed",   desc: "See what Celestials worldwide are sharing, celebrating, and praying about." },
+              { icon: Globe,         title: "Global Feed",   desc: "See what Celestials worldwide are sharing, celebrating, and praying about." },
             ].map(({ icon: Icon, title, desc }) => (
               <div key={title} className="bg-white/10 border border-white/10 rounded-2xl p-6 text-white">
                 <Icon size={22} className="text-[var(--brand-accent)] mb-4" />

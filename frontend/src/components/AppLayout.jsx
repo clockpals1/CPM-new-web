@@ -3,14 +3,15 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Home, Church, Users, HandHelping, Calendar, Music, Briefcase,
-  Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search, Globe2, UserCircle
+  Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search, Globe, MessageCircle
 } from "lucide-react";
 
 const NAV = [
   { to: "/app", label: "Home", icon: Home, end: true, testid: "nav-home" },
   { to: "/app/parishes", label: "Parishes", icon: Church, testid: "nav-parishes" },
   { to: "/app/my-parish", label: "My Parish", icon: Sparkles, testid: "nav-myparish" },
-  { to: "/app/feed", label: "Global Feed", icon: Globe2, testid: "nav-feed" },
+  { to: "/app/parish-feed", label: "Parish Feed", icon: MessageCircle, testid: "nav-parish-feed" },
+  { to: "/app/feed", label: "Global Feed", icon: Globe, testid: "nav-feed" },
   { to: "/app/prayer", label: "Prayer Wall", icon: Heart, testid: "nav-prayer" },
   { to: "/app/testimonies", label: "Testimonies", icon: Sparkles, testid: "nav-testimonies" },
   { to: "/app/events", label: "Events", icon: Calendar, testid: "nav-events" },
