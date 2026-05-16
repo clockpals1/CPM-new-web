@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   Church, Heart, Users, Calendar, MapPin, ArrowRight,
   Sparkles, Globe, Music, HandHelping, CheckCircle, ChevronRight, MessageCircle,
+  Play, Radio, CalendarClock,
 } from "lucide-react";
 
 // ── Skeleton loader ───────────────────────────────────────────────────────
@@ -154,6 +155,75 @@ function DiscoveryState({ user, prayers, stats }) {
   );
 }
 
+// ── Engagement Rail ──────────────────────────────────────────────────────
+function EngagementRail() {
+  const [engagement, setEngagement] = useState(null);
+  useEffect(() => {
+    http.get("/me/engagement").then((r) => setEngagement(r.data)).catch(() => {});
+  }, []);
+  if (!engagement) return null;
+  const { live_now = [], next_rehearsal, upcoming_events = [] } = engagement;
+  const nextEvent = upcoming_events[0];
+  const hasContent = live_now.length > 0 || next_rehearsal || nextEvent;
+  if (!hasContent) return null;
+  return (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="engagement-rail">
+      {/* Live Now */}
+      {live_now.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={{ background: "linear-gradient(135deg, #dc2626, #b91c1c)" }} data-testid="home-live-now">
+          <div className="p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-white/20 grid place-items-center shrink-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-white/80 text-[10px] uppercase tracking-widest font-semibold">Live Now</div>
+              <div className="text-white text-sm font-medium truncate mt-0.5">{live_now[0].title}</div>
+              <Link to="/app/events" className="mt-2 inline-flex items-center gap-1 text-white/80 text-xs hover:text-white">
+                <Play size={10} /> Watch <ChevronRight size={10} />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Next rehearsal */}
+      {next_rehearsal && (
+        <div className="card-surface border-l-4 border-[var(--brand-accent)]" data-testid="home-next-rehearsal">
+          <div className="p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[var(--brand-accent)]/10 grid place-items-center shrink-0">
+              <CalendarClock size={17} className="text-[var(--brand-accent)]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-widest font-semibold text-[var(--brand-accent)]">Next Rehearsal</div>
+              <div className="text-sm font-medium text-[var(--brand-primary)] truncate mt-0.5">{next_rehearsal.title}</div>
+              <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                {new Date(next_rehearsal.scheduled_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Next event */}
+      {nextEvent && (
+        <div className="card-surface border-l-4 border-emerald-400" data-testid="home-next-event">
+          <div className="p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 grid place-items-center shrink-0">
+              <Calendar size={17} className="text-emerald-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-widest font-semibold text-emerald-700">Up Next</div>
+              <div className="text-sm font-medium text-[var(--brand-primary)] truncate mt-0.5">{nextEvent.title}</div>
+              <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                {new Date(nextEvent.starts_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </div>
+              <Link to="/app/events" className="text-xs text-emerald-600 hover:underline mt-1 inline-flex items-center gap-0.5">View all <ChevronRight size={10} /></Link>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Parish Dashboard (1 or 2+ parishes) ──────────────────────────────────
 function ParishDashboard({ user, memberships, prayers, events, stats }) {
   const active = memberships[0];
@@ -240,6 +310,9 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
           </Link>
         </div>
       )}
+
+      {/* Engagement rail */}
+      <EngagementRail />
 
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

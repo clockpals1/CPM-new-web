@@ -243,6 +243,37 @@ class ChoirJoinIn(BaseModel):
     note: Optional[str] = ""
 
 
+class RehearsalIn(BaseModel):
+    parish_id: str
+    title: str
+    notes: Optional[str] = ""
+    location: Optional[str] = ""
+    scheduled_at: str
+    voice_parts: Optional[List[str]] = []
+
+
+class ChoirAnnouncementIn(BaseModel):
+    parish_id: str
+    title: str
+    body: str
+    priority: Optional[str] = "normal"  # normal | urgent
+
+
+class EventLivestreamIn(BaseModel):
+    provider: str  # youtube | facebook | instagram | tiktok | custom
+    url: str
+    embed_type: Optional[str] = "link"  # link | embed
+    label: Optional[str] = ""
+    is_primary: Optional[bool] = True
+
+
+class EventHighlightIn(BaseModel):
+    title: str
+    body: Optional[str] = ""
+    replay_url: Optional[str] = ""
+    media_urls: Optional[List[str]] = []
+
+
 class ServiceJoinIn(BaseModel):
     parish_id: str
     service_type: str
@@ -1094,9 +1125,123 @@ async def list_events(scope: Optional[str] = None, parish_id: Optional[str] = No
 async def rsvp_event(eid: str, user: dict = Depends(get_current_user)):
     existing = await db.event_attendance.find_one({"event_id": eid, "user_id": user["id"]})
     if existing:
-        return {"ok": True}
+        return {"ok": True, "already": True}
     await db.event_attendance.insert_one({"id": new_id(), "event_id": eid, "user_id": user["id"], "user_name": user.get("name"), "created_at": iso(now_utc())})
     return {"ok": True}
+
+
+@api.get("/events/{eid}/rsvp-status")
+async def rsvp_status(eid: str, user: dict = Depends(get_current_user)):
+    existing = await db.event_attendance.find_one({"event_id": eid, "user_id": user["id"]})
+    count = await db.event_attendance.count_documents({"event_id": eid})
+    return {"rsvped": bool(existing), "count": count}
+
+
+@api.patch("/events/{eid}")
+async def update_event(eid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    safe = {k: v for k, v in body.items() if k not in ("id", "_id", "created_by", "created_at")}
+    await db.events.update_one({"id": eid}, {"$set": safe})
+    ev = await db.events.find_one({"id": eid}, {"_id": 0})
+    return ev
+
+
+@api.delete("/events/{eid}")
+async def delete_event(eid: str, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    await db.events.delete_one({"id": eid})
+    return {"ok": True}
+
+
+@api.post("/events/{eid}/livestreams")
+async def add_event_livestream(eid: str, body: EventLivestreamIn, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "event_id": eid, "created_by": user["id"], "created_at": iso(now_utc())})
+    await db.event_livestreams.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/events/{eid}/livestreams")
+async def get_event_livestreams(eid: str):
+    items = await db.event_livestreams.find({"event_id": eid}, {"_id": 0}).to_list(10)
+    return items
+
+
+@api.delete("/events/{eid}/livestreams/{lid}")
+async def delete_event_livestream(eid: str, lid: str, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    await db.event_livestreams.delete_one({"id": lid, "event_id": eid})
+    return {"ok": True}
+
+
+@api.post("/events/{eid}/highlights")
+async def add_event_highlight(eid: str, body: EventHighlightIn, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "event_id": eid, "author_id": user["id"], "author_name": user.get("name", ""), "created_at": iso(now_utc())})
+    await db.event_highlights.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/events/{eid}/highlights")
+async def get_event_highlights(eid: str):
+    items = await db.event_highlights.find({"event_id": eid}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    return items
+
+
+@api.post("/admin/events/{eid}/feature")
+async def feature_event(eid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    await db.events.update_one({"id": eid}, {"$set": {"featured": bool(body.get("featured", True))}})
+    return {"ok": True}
+
+
+@api.get("/events/featured")
+async def list_featured_events():
+    items = await db.events.find({"featured": True}, {"_id": 0}).sort("starts_at", 1).limit(10).to_list(10)
+    return items
+
+
+@api.get("/me/engagement")
+async def me_engagement(user: dict = Depends(get_current_user)):
+    now_str = iso(now_utc())
+    memberships = await db.parish_memberships.find({"user_id": user["id"], "status": "approved"}, {"_id": 0}).to_list(10)
+    parish_ids = [m["parish_id"] for m in memberships]
+
+    if parish_ids:
+        parish_filter = {"$or": [{"scope": "global"}, {"scope": "parish", "parish_id": {"$in": parish_ids}}]}
+    else:
+        parish_filter = {"scope": "global"}
+
+    upcoming = await db.events.find(
+        {**parish_filter, "starts_at": {"$gte": now_str}},
+        {"_id": 0}
+    ).sort("starts_at", 1).limit(5).to_list(5)
+
+    live_now = await db.events.find(
+        {**parish_filter, "starts_at": {"$lte": now_str}, "ends_at": {"$gte": now_str}},
+        {"_id": 0}
+    ).to_list(5)
+
+    featured = await db.events.find(
+        {"featured": True, "starts_at": {"$gte": now_str}},
+        {"_id": 0}
+    ).sort("starts_at", 1).limit(3).to_list(3)
+
+    next_rehearsal = None
+    if parish_ids:
+        reh = await db.rehearsals.find(
+            {"parish_id": {"$in": parish_ids}, "scheduled_at": {"$gte": now_str}},
+            {"_id": 0}
+        ).sort("scheduled_at", 1).limit(1).to_list(1)
+        next_rehearsal = reh[0] if reh else None
+
+    choir_memberships = await db.choir_memberships.find({"user_id": user["id"]}, {"_id": 0}).to_list(10)
+
+    return {
+        "upcoming_events": upcoming,
+        "live_now": live_now,
+        "next_rehearsal": next_rehearsal,
+        "choir_memberships": choir_memberships,
+        "featured_events": featured,
+    }
 
 
 # ---------------- Choir ----------------
@@ -1161,6 +1306,59 @@ async def choir_promote(cid: str, user: dict = Depends(require_roles("super_admi
     if dir_count >= 2:
         raise HTTPException(400, "Parish already has 2 choir directors")
     await db.choir_memberships.update_one({"id": cid}, {"$set": {"role": "director"}})
+    return {"ok": True}
+
+
+@api.get("/me/choir-status")
+async def my_choir_status(user: dict = Depends(get_current_user)):
+    items = await db.choir_memberships.find({"user_id": user["id"]}, {"_id": 0}).to_list(20)
+    for c in items:
+        p = await db.parishes.find_one({"id": c["parish_id"]}, {"_id": 0})
+        c["parish"] = p
+    return items
+
+
+# ---------------- Rehearsals ----------------
+@api.post("/rehearsals")
+async def create_rehearsal(body: RehearsalIn, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "created_by": user["id"], "created_at": iso(now_utc())})
+    await db.rehearsals.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/rehearsals")
+async def list_rehearsals(parish_id: str):
+    items = await db.rehearsals.find({"parish_id": parish_id}, {"_id": 0}).sort("scheduled_at", 1).to_list(100)
+    return items
+
+
+@api.delete("/rehearsals/{rid}")
+async def delete_rehearsal(rid: str, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    await db.rehearsals.delete_one({"id": rid})
+    return {"ok": True}
+
+
+# ---------------- Choir Announcements ----------------
+@api.post("/choir/announcements")
+async def create_choir_announcement(body: ChoirAnnouncementIn, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "author_id": user["id"], "author_name": user.get("name", ""), "created_at": iso(now_utc())})
+    await db.choir_announcements.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/choir/announcements")
+async def list_choir_announcements(parish_id: str):
+    items = await db.choir_announcements.find({"parish_id": parish_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return items
+
+
+@api.delete("/choir/announcements/{aid}")
+async def delete_choir_announcement(aid: str, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
+    await db.choir_announcements.delete_one({"id": aid})
     return {"ok": True}
 
 
@@ -1866,6 +2064,7 @@ DEFAULT_SERVICE_TYPES = ["Ushering", "Choir", "Media & Tech", "Sunday School Tea
 DEFAULT_PRAYER_CATEGORIES = ["Health", "Family", "Career", "Travel", "Thanksgiving", "Spiritual Growth", "Nation", "Other"]
 DEFAULT_JOB_CATEGORIES = ["Technology", "Education", "Healthcare", "Ministry", "Finance", "Trades", "Hospitality", "Other"]
 DEFAULT_REPORT_REASONS = ["Spam", "Harassment", "Hate Speech", "Misinformation", "Inappropriate Content", "Other"]
+DEFAULT_LIVESTREAM_PROVIDERS = ["YouTube", "Facebook", "Instagram", "TikTok", "Custom"]
 
 SAMPLE_PARISHES = [
     {"name": "CCC Bethel Parish, Lagos", "country": "Nigeria", "city": "Lagos", "address": "12 Surulere Avenue, Lagos", "shepherd_name": "Snr Evang. Adekunle", "phone": "+234 800 000 0001", "service_times": "Sun 9am, Wed 6pm", "description": "A vibrant parish in central Lagos.", "join_mode": "open", "status": "active"},
@@ -1952,6 +2151,8 @@ async def on_startup():
         await _ensure_setting("job_categories", j, i)
     for i, r in enumerate(DEFAULT_REPORT_REASONS):
         await _ensure_setting("report_reasons", r, i)
+    for i, lp in enumerate(DEFAULT_LIVESTREAM_PROVIDERS):
+        await _ensure_setting("livestream_providers", lp, i, {"slug": lp.lower()})
 
     # seed parish join rule defaults (stored as integration_config)
     join_rule_defaults = [

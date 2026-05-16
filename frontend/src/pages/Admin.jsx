@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -11,6 +11,7 @@ const KEYS = [
   { key: "prayer_categories", label: "Prayer Categories" },
   { key: "job_categories", label: "Job Categories" },
   { key: "report_reasons", label: "Report Reasons" },
+  { key: "livestream_providers", label: "Livestream Providers" },
 ];
 
 function SettingsManager() {
@@ -580,6 +581,144 @@ function PrayerModerationManager() {
   );
 }
 
+// ── Choir Hub Manager ────────────────────────────────────────────────────
+function ChoirHubManager() {
+  const [parishes, setParishes] = useState([]);
+  const [selectedPid, setSelectedPid] = useState("");
+  const [pending, setPending] = useState([]);
+  const [rehearsals, setRehearsals] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [subTab, setSubTab] = useState("pending");
+  const [busy, setBusy] = useState({});
+
+  useEffect(() => {
+    http.get("/parishes").then((r) => {
+      setParishes(r.data);
+      if (r.data[0]) setSelectedPid(r.data[0].id);
+    }).catch(() => {});
+    http.get("/choir/pending").then((r) => setPending(r.data)).catch(() => {});
+  }, []);
+
+  const loadParishData = useCallback(() => {
+    if (!selectedPid) return;
+    http.get("/rehearsals", { params: { parish_id: selectedPid } }).then((r) => setRehearsals(r.data)).catch(() => {});
+    http.get("/choir/announcements", { params: { parish_id: selectedPid } }).then((r) => setAnnouncements(r.data)).catch(() => {});
+  }, [selectedPid]);
+
+  useEffect(() => { loadParishData(); }, [loadParishData]);
+
+  const verify = async (cid) => {
+    setBusy((b) => ({ ...b, [cid]: true }));
+    try { await http.post(`/choir/${cid}/verify`); toast.success("Member verified"); http.get("/choir/pending").then((r) => setPending(r.data)); } catch (e) { toast.error(formatErr(e)); }
+    finally { setBusy((b) => { const n = { ...b }; delete n[cid]; return n; }); }
+  };
+
+  const promote = async (cid) => {
+    try { await http.post(`/choir/${cid}/promote`); toast.success("Promoted to director"); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const deleteRehearsal = async (rid) => {
+    try { await http.delete(`/rehearsals/${rid}`); loadParishData(); toast.success("Rehearsal removed"); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const deleteAnnouncement = async (aid) => {
+    try { await http.delete(`/choir/announcements/${aid}`); loadParishData(); toast.success("Announcement removed"); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const parishPending = pending.filter((c) => c.parish_id === selectedPid);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select className="input-clean max-w-xs" value={selectedPid} onChange={(e) => setSelectedPid(e.target.value)}>
+          <option value="">Select parish</option>
+          {parishes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <div className="flex gap-1.5">
+          {["pending", "rehearsals", "announcements"].map((s) => (
+            <button key={s} onClick={() => setSubTab(s)} className={`px-3 py-1.5 rounded-md border text-xs capitalize ${subTab === s ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)] text-[var(--text-secondary)]"}`}>
+              {s}
+              {s === "pending" && pending.length > 0 && <span className="ml-1.5 bg-amber-500 text-white text-[10px] rounded-full px-1.5 py-0.5">{pending.length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {subTab === "pending" && (
+        <div className="space-y-3">
+          <div className="text-sm text-[var(--text-secondary)]">{parishPending.length} pending choir verification request{parishPending.length !== 1 ? "s" : ""} for this parish.</div>
+          {parishPending.length === 0 ? (
+            <div className="card-surface p-8 text-center space-y-2">
+              <CheckCircle size={28} className="mx-auto text-emerald-500" />
+              <p className="text-sm text-[var(--text-secondary)]">No pending choir requests for this parish.</p>
+            </div>
+          ) : parishPending.map((c) => (
+            <div key={c.id} className="card-surface p-4 flex items-center gap-3 flex-wrap" data-testid={`admin-choir-pending-${c.id}`}>
+              <div className="w-9 h-9 rounded-full bg-[var(--bg-subtle)] grid place-items-center font-medium shrink-0">{(c.user_name || "?").slice(0, 1)}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-[var(--brand-primary)]">{c.user_name}</div>
+                <div className="text-xs text-[var(--text-tertiary)]">{c.voice_part} · {c.parish?.name}</div>
+                {c.note && <div className="text-xs text-[var(--text-secondary)] italic mt-0.5">"{c.note}"</div>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => verify(c.id)} disabled={!!busy[c.id]} className="btn-primary text-xs inline-flex items-center gap-1" data-testid={`admin-verify-${c.id}`}>
+                  {busy[c.id] ? <Loader2 size={11} className="animate-spin" /> : <BadgeCheck size={11} />} Verify
+                </button>
+                <button onClick={() => promote(c.id)} className="text-xs px-3 py-1.5 border border-[var(--brand-accent)] text-[var(--brand-accent)] rounded-md hover:bg-[var(--brand-accent)] hover:text-white transition-colors">
+                  Make Director
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {subTab === "rehearsals" && (
+        <div className="space-y-3">
+          <div className="text-sm text-[var(--text-secondary)]">{rehearsals.length} rehearsal{rehearsals.length !== 1 ? "s" : ""} for this parish.</div>
+          {rehearsals.length === 0 ? (
+            <div className="card-surface p-6 text-center text-sm text-[var(--text-secondary)]">No rehearsals scheduled. Use the Choir Hub page to schedule one.</div>
+          ) : rehearsals.map((r) => (
+            <div key={r.id} className="card-surface p-4 flex items-start gap-3" data-testid={`admin-rehearsal-${r.id}`}>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-[var(--brand-primary)]">{r.title}</div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{new Date(r.scheduled_at).toLocaleString()} {r.location && `· ${r.location}`}</div>
+                {r.notes && <p className="text-xs text-[var(--text-secondary)] mt-1">{r.notes}</p>}
+              </div>
+              <button onClick={() => deleteRehearsal(r.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 shrink-0">
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {subTab === "announcements" && (
+        <div className="space-y-3">
+          <div className="text-sm text-[var(--text-secondary)]">{announcements.length} choir announcement{announcements.length !== 1 ? "s" : ""} for this parish.</div>
+          {announcements.length === 0 ? (
+            <div className="card-surface p-6 text-center text-sm text-[var(--text-secondary)]">No announcements. Post one from the Choir Hub page.</div>
+          ) : announcements.map((a) => (
+            <div key={a.id} className="card-surface p-4 flex items-start gap-3" data-testid={`admin-announcement-${a.id}`}>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  {a.priority === "urgent" && <span className="text-[10px] font-semibold text-red-600 uppercase">Urgent</span>}
+                  <span className="text-sm font-medium text-[var(--brand-primary)]">{a.title}</span>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)] mt-1 line-clamp-2">{a.body}</p>
+                <div className="text-xs text-[var(--text-tertiary)] mt-1">by {a.author_name} · {new Date(a.created_at).toLocaleDateString()}</div>
+              </div>
+              <button onClick={() => deleteAnnouncement(a.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 shrink-0">
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const TABS = [
@@ -590,6 +729,7 @@ export default function Admin() {
     { k: "endorsements", l: "Shepherd Endorsements", icon: ShieldCheck },
     { k: "moderation", l: "Moderation", icon: FileWarning },
     { k: "prayer-mod", l: "Prayer Wall", icon: Heart },
+    { k: "choir-hub", l: "Choir Hub", icon: Music },
     { k: "integrations", l: "Integrations", icon: Zap },
     { k: "audit", l: "Audit Log", icon: History },
   ];
@@ -613,6 +753,7 @@ export default function Admin() {
       {tab === "endorsements" && <ShepherdEndorsementManager />}
       {tab === "moderation" && <ModerationManager />}
       {tab === "prayer-mod" && <PrayerModerationManager />}
+      {tab === "choir-hub" && <ChoirHubManager />}
       {tab === "integrations" && <IntegrationsManager />}
       {tab === "audit" && <AuditManager />}
     </div>

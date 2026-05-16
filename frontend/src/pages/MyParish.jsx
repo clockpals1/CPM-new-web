@@ -6,6 +6,7 @@ import {
   MessageSquare, Navigation, Info, Heart, Send,
   ChevronRight, Globe, Video, Star, CheckCircle2,
   ArrowRight, AlertCircle, ExternalLink, RefreshCw,
+  CalendarClock, Megaphone, Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
@@ -198,6 +199,64 @@ function HighlightsRow({ membership }) {
       ) : (
         <div className="card-surface p-4 flex items-center gap-3 border-dashed text-sm text-[var(--text-tertiary)]" data-testid="no-events-highlight">
           <Calendar size={14} className="flex-shrink-0" /> No upcoming events scheduled for this parish yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Choir Pulse Section ──────────────────────────────────────────────────
+function ChoirPulseSection({ parishId }) {
+  const [rehearsal, setRehearsal] = useState(null);
+  const [announcement, setAnnouncement] = useState(null);
+  useEffect(() => {
+    if (!parishId) return;
+    const now = new Date().toISOString();
+    http.get("/rehearsals", { params: { parish_id: parishId } })
+      .then((r) => {
+        const upcoming = r.data.filter((x) => x.scheduled_at >= now);
+        setRehearsal(upcoming[0] || null);
+      }).catch(() => {});
+    http.get("/choir/announcements", { params: { parish_id: parishId } })
+      .then((r) => setAnnouncement(r.data[0] || null)).catch(() => {});
+  }, [parishId]);
+
+  if (!rehearsal && !announcement) return null;
+  return (
+    <div className="space-y-3" data-testid="choir-pulse-section">
+      <div className="flex items-center justify-between">
+        <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-tertiary)] font-semibold flex items-center gap-1.5">
+          <Music size={11} /> Choir Pulse
+        </div>
+        <a href="#/app/choir" className="text-xs text-[var(--brand-accent)] hover:underline flex items-center gap-0.5">Choir Hub <ChevronRight size={11} /></a>
+      </div>
+      {rehearsal && (
+        <div className="card-surface p-4 flex items-start gap-3 border-l-4 border-[var(--brand-accent)]" data-testid="choir-pulse-rehearsal">
+          <div className="w-9 h-9 rounded-lg bg-[var(--brand-accent)]/10 grid place-items-center shrink-0">
+            <CalendarClock size={16} className="text-[var(--brand-accent)]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-widest font-semibold text-[var(--brand-accent)]">Next Rehearsal</div>
+            <div className="text-sm font-medium text-[var(--brand-primary)] mt-0.5">{rehearsal.title}</div>
+            <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+              {new Date(rehearsal.scheduled_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              {rehearsal.location && ` · ${rehearsal.location}`}
+            </div>
+          </div>
+        </div>
+      )}
+      {announcement && (
+        <div className="card-surface p-4 flex items-start gap-3" data-testid="choir-pulse-announcement">
+          <div className="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] grid place-items-center shrink-0">
+            <Megaphone size={16} className={announcement.priority === "urgent" ? "text-red-600" : "text-[var(--brand-primary)]"} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-widest font-semibold text-[var(--text-tertiary)] flex items-center gap-1">
+              Choir Notice {announcement.priority === "urgent" && <span className="text-red-600">· Urgent</span>}
+            </div>
+            <div className="text-sm font-medium text-[var(--brand-primary)] mt-0.5">{announcement.title}</div>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 line-clamp-2">{announcement.body}</p>
+          </div>
         </div>
       )}
     </div>
@@ -400,6 +459,9 @@ export default function MyParish() {
 
       {/* Highlights */}
       {activeMembership && <HighlightsRow membership={activeMembership} />}
+
+      {/* Choir Pulse */}
+      {activeMembership?.parish_id && <ChoirPulseSection parishId={activeMembership.parish_id} key={`choir-${activeMembership.parish_id}`} />}
 
       {/* Quick actions */}
       {activeParish && <QuickActionsGrid parish={activeParish} parishId={activeMembership.parish_id} />}
