@@ -294,6 +294,12 @@ export default function ParishFeed() {
   const [activePid, setActivePid] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+
+  // Sync welcomeDismissed from localStorage whenever the active parish changes
+  useEffect(() => {
+    if (activePid) setWelcomeDismissed(Boolean(localStorage.getItem(WELCOME_KEY(activePid))));
+  }, [activePid]);
 
   const loadDashboard = useCallback(() => {
     setLoading(true);
@@ -353,7 +359,6 @@ export default function ParishFeed() {
   const activeParish = activeMembership?.parish;
   const isNewMember = activeMembership?.approved_at && (Date.now() - new Date(activeMembership.approved_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
   const welcomeKey = WELCOME_KEY(activeMembership?.parish_id || "");
-  const [welcomeDismissed, setWelcomeDismissed] = React.useState(() => Boolean(localStorage.getItem(welcomeKey)));
   const dismissWelcome = () => { localStorage.setItem(welcomeKey, "1"); setWelcomeDismissed(true); };
 
   const pinnedPosts = posts.filter((p) => p.pinned);
