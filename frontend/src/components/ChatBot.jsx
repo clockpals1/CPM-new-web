@@ -4,14 +4,38 @@ import { Bot, X, Send, Loader2, ChevronDown, Sparkles } from "lucide-react";
 
 const WELCOME = "Hallelujah! I'm the CPM Assistant — your guide to CelestialPeopleMeet and the Celestial Church of Christ. How can I help you today?";
 
+function HymnBlock({ text }) {
+  const [header, ...lyricBlocks] = text.split("\n\n");
+  const headerLines = header.split("\n");
+  const title = headerLines[0];
+  const meta = headerLines.slice(1);
+  const lyrics = lyricBlocks.join("\n\n");
+  return (
+    <div className="space-y-2.5">
+      <div>
+        <div className="font-semibold text-[var(--brand-primary)] text-sm leading-snug">{title}</div>
+        {meta.map((l, i) => (
+          <div key={i} className="text-xs text-[var(--text-tertiary)] leading-snug mt-0.5">{l}</div>
+        ))}
+      </div>
+      {lyrics && (
+        <div className="border-l-2 border-[var(--brand-accent)] pl-3 text-sm text-[var(--text-primary)] whitespace-pre-wrap leading-relaxed font-normal">
+          {lyrics}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BotMessage({ text }) {
+  const isHymn = text.startsWith("\u2726");
   return (
     <div className="flex items-start gap-2.5 max-w-[85%]">
       <div className="w-7 h-7 rounded-full bg-[var(--brand-primary)] text-white grid place-items-center shrink-0 mt-0.5">
         <Bot size={14} />
       </div>
-      <div className="bg-white border border-[var(--border-default)] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm text-[var(--text-primary)] leading-relaxed shadow-sm whitespace-pre-wrap">
-        {text}
+      <div className="bg-white border border-[var(--border-default)] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm text-[var(--text-primary)] leading-relaxed shadow-sm">
+        {isHymn ? <HymnBlock text={text} /> : <span className="whitespace-pre-wrap">{text}</span>}
       </div>
     </div>
   );

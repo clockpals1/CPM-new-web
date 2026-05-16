@@ -13,34 +13,56 @@ function writeCache(u) {
 
 export function AuthProvider({ children }) {
   const cached = readCache();
-  // Start authenticated if we have a cached session OR a stored token — avoids
-  // flashing the auth screen on mobile while the /auth/me verify runs.
   const hasStoredCreds = Boolean(cached || readToken());
   const [user, setUser] = useState(cached || null);
+  // loading=true means we must NOT redirect yet (no cached creds to show)
+  // verifying=true means a background check is running but we already show cached user
   const [loading, setLoading] = useState(!hasStoredCreds);
+  const [verifying, setVerifying] = useState(true);
 
   useEffect(() => {
     let active = true;
+
+    const tryRefresh = async () => {
+      const tok = readToken();
+      if (!tok) return false;
+      try {
+        const r = await http.post("/auth/refresh", {}, {
+          headers: { Authorization: `Bearer ${tok}` },
+          timeout: 55000,
+        });
+        if (r.data?.access_token) {
+          storeToken(r.data.access_token);
+          const me = await http.get("/auth/me", { timeout: 55000 });
+          if (active) { setUser(me.data); writeCache(me.data); }
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+
     http
-      .get("/auth/me", { timeout: 28000 })
+      .get("/auth/me", { timeout: 55000 })
       .then((r) => {
         if (!active) return;
         setUser(r.data);
         writeCache(r.data);
-        setLoading(false);
       })
-      .catch((e) => {
+      .catch(async (e) => {
         if (!active) return;
         const status = e?.response?.status;
         if (status === 401) {
-          // Definitive rejection — clear everything
-          storeToken(null);
-          writeCache(null);
-          setUser(false);
+          const refreshed = await tryRefresh();
+          if (!refreshed && active) {
+            storeToken(null);
+            writeCache(null);
+            setUser(false);
+          }
         }
-        // For network errors / timeouts (no response) keep cached user so
-        // mobile users aren't bounced just because Render is waking up.
-        setLoading(false);
+        // Network / timeout errors: keep cached user — Render free-tier cold start
+      })
+      .finally(() => {
+        if (active) { setLoading(false); setVerifying(false); }
       });
     return () => { active = false; };
   }, []);
@@ -83,7 +105,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, loading, verifying, login, register, logout, refresh, setUser }}>
       {children}
     </AuthContext.Provider>
   );

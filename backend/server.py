@@ -2396,14 +2396,35 @@ async def get_hymn(num: int, actor: dict = Depends(require_roles("super_admin", 
     return h
 
 
+def _format_hymn_reply(hymn: dict) -> str:
+    """
+    Format a CCC hymn record into clean, readable text for the chat UI.
+    Header block (number + metadata) is separated from lyrics by a blank line
+    so the frontend can style them distinctly.
+    """
+    header = [f"\u2726  CCC Hymn #{hymn.get('number', '?')}"]
+    cat = (hymn.get("category") or hymn.get("section") or "").strip()
+    if cat:
+        header.append(f"Category: {cat.title() if cat.isupper() else cat}")
+    opening = (hymn.get("opening_line") or "").strip()
+    if opening:
+        header.append(f"Opening line: {opening}")
+    lyrics = (hymn.get("lyrics_text") or "").strip()
+    if lyrics:
+        return "\n".join(header) + "\n\n" + lyrics
+    return "\n".join(header)
+
+
 async def _get_hymn_context(message: str) -> tuple:
     """
-    Detect if message is a hymn query. Return (context_str, is_reserved).
-    Returns (None, False) if message is not a hymn query.
+    Detect if message is a hymn query.
+    Returns (result, is_reserved) where result is:
+      - dict  : the hymn record (found, not reserved) — caller formats directly
+      - 'RESERVED'  : hymn is reserved
+      - 'NOT_FOUND' : DB is seeded but no hymn matched the query
+      - None        : not a hymn query, or hymn DB not yet seeded
     """
     import re as _re2
-    RESERVED_REPLY = "RESERVED"
-    NOT_FOUND_REPLY = "NOT_FOUND"
 
     # Pattern 1: "hymn 35", "hymn number 35", "hymn #35", "hymn no. 35"
     nm = _re2.search(
@@ -2415,7 +2436,6 @@ async def _get_hymn_context(message: str) -> tuple:
     if nm:
         hymn_num = int(nm.group(1) or nm.group(2))
     elif 'hymn' in message.lower():
-        # Fallback: bare number anywhere in a hymn-related message
         bare = _re2.search(r'\b(\d{1,4})\b', message)
         if bare:
             hymn_num = int(bare.group(1))
@@ -2424,7 +2444,7 @@ async def _get_hymn_context(message: str) -> tuple:
     if hymn_num is not None:
         hymn = await db.ai_hymns.find_one({"number": hymn_num}, {"_id": 0})
 
-    # Pattern 2: title / opening-line search
+    # Pattern 2: title / opening-line text search
     if hymn is None:
         stopwords = r'\b(?:hymn|what|is|the|sing|lyrics|words|tell|me|about|number|can|you|please|do|know|give|say|says|does|like)\b'
         clean = _re2.sub(stopwords, '', message, flags=_re2.IGNORECASE).strip()
@@ -2438,33 +2458,17 @@ async def _get_hymn_context(message: str) -> tuple:
                 {"_id": 0},
             )
 
-    # No hymn collection OR no match at all
     total = await db.ai_hymns.count_documents({})
     if total == 0:
-        # Hymn DB not yet seeded — fall through to raw-doc KB
-        return (None, False)
+        return (None, False)   # DB not seeded — fall through to raw-doc KB
 
     if hymn is None:
-        if 'hymn' in message.lower():
-            return (NOT_FOUND_REPLY, False)
-        return (None, False)
+        return ("NOT_FOUND", False) if 'hymn' in message.lower() else (None, False)
 
     if hymn.get("reserved"):
-        return (RESERVED_REPLY, True)
+        return ("RESERVED", True)
 
-    # Build clean context block
-    parts = [f"CCC Hymn #{hymn['number']}"]
-    if hymn.get("section"):
-        parts.append(f"Section: {hymn['section']}")
-    if hymn.get("category"):
-        parts.append(f"Category: {hymn['category']}")
-    if hymn.get("title") and hymn["title"] != hymn.get("opening_line"):
-        parts.append(f"Title: {hymn['title']}")
-    if hymn.get("opening_line"):
-        parts.append(f"Opening Line: {hymn['opening_line']}")
-    if hymn.get("lyrics_text"):
-        parts.append(f"Lyrics:\n{hymn['lyrics_text'][:1800]}")
-    return ("\n".join(parts), False)
+    return (hymn, False)   # return the document dict directly
 
 
 # ── AI Provider — supports Groq (free), Mistral, Together AI, Ollama, OpenAI ────
@@ -2518,15 +2522,6 @@ YOUR ROLES:
 TONE: Warm, reverent, encouraging. You may greet with "Amen", "Hallelujah", or "Greetings in the name of our Lord". 
 LIMITS: Do not give medical advice, make up church doctrine, or discuss politics."""
 
-_HYMN_SYSTEM_NOTE = """
-HYMN RETRIEVAL RULES (mandatory):
-- You have been given structured hymn data from the CCC Hymn Book database above.
-- Answer ONLY from the provided hymn record. Do NOT invent or guess lyrics not shown.
-- If lyrics are partial, say "The hymn continues beyond what is stored here."
-- If a user asks for a hymn and the context says NOT_FOUND, say "I don't have that hymn in my database yet. Please check the printed CCC Hymn Book."
-- Never confuse section headings, chorus labels, or category notes for actual hymn lyrics.
-"""
-
 @api.post("/ai/chat")
 async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
     message = (body.get("message") or "").strip()[:2000]
@@ -2534,31 +2529,26 @@ async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
     if not message:
         raise HTTPException(400, "message required")
 
-    # ── Hymn short-circuit ──────────────────────────────────────────────────
-    hymn_ctx, is_reserved = await _get_hymn_context(message)
+    # ── Hymn short-circuit (no AI needed) ───────────────────────────────────
+    hymn_result, is_reserved = await _get_hymn_context(message)
     if is_reserved:
         return {"reply": "This hymn is reserved. Information will be provided soon.", "error": False}
+    if isinstance(hymn_result, dict):
+        # Structured hymn found — return pre-formatted reply, bypassing AI entirely
+        return {"reply": _format_hymn_reply(hymn_result), "error": False}
 
+    # ── AI path ──────────────────────────────────────────────────────────────
     provider = (await get_config("ai_provider") or "groq").lower()
     api_key  = await get_config("ai_api_key")
     if not api_key and provider != "ollama":
         return {
-            "reply": f"The CPM Assistant needs an API key. Go to Admin → Integrations, set the AI Provider to '{provider}' and paste your free API key.",
+            "reply": f"The CPM Assistant needs an API key. Go to Admin \u2192 Integrations, set the AI Provider to '{provider}' and paste your free API key.",
             "error": True,
         }
 
-    # ── Build knowledge-base context block ──────────────────────────────────
     kb = ""
-    if hymn_ctx == "NOT_FOUND":
-        kb = "\n\n[HYMN DATABASE NOTE: The requested hymn is not yet stored. Tell the user their hymn was not found and suggest the printed CCC Hymn Book.]"
-    elif hymn_ctx:
-        # Structured hymn record takes priority over raw documents
-        kb = (
-            "\n\n=== CCC HYMN DATABASE RESULT ===\n"
-            + hymn_ctx
-            + "\n=== END HYMN ==="
-            + _HYMN_SYSTEM_NOTE
-        )
+    if hymn_result == "NOT_FOUND":
+        kb = "\n\n[HYMN NOTE: The requested hymn was not found in the database. Inform the user politely and suggest checking the printed CCC Hymn Book.]"
     else:
         # General query — use raw uploaded KB documents
         docs = await db.ai_documents.find({}, {"_id": 0, "title": 1, "content": 1}).to_list(15)
@@ -2573,7 +2563,7 @@ async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": str(h["content"])[:600]})
     messages.append({"role": "user", "content": message})
-    reply = await _ai_complete(messages, max_tokens=600, temperature=0.7)
+    reply = await _ai_complete(messages, max_tokens=700, temperature=0.65)
     if reply:
         return {"reply": reply, "error": False}
     return {"reply": "I'm temporarily unavailable. Please try again in a moment.", "error": True}

@@ -56,16 +56,18 @@ class ErrorBoundary extends Component {
 }
 
 function Protected({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, verifying } = useAuth();
   const location = useLocation();
-  if (loading) return <Loader />;
+  // Wait while initial verify (or refresh) is in progress so we don't
+  // redirect mobile users who have a cached session but no response yet.
+  if (loading || (verifying && user === null)) return <Loader />;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
   return children;
 }
 
 function AdminGate({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return <Loader />;
+  const { user, loading, verifying } = useAuth();
+  if (loading || (verifying && user === null)) return <Loader />;
   if (!user) return <Navigate to="/auth" replace />;
   if (user.role !== "super_admin" && user.role !== "parish_admin") return <Navigate to="/app" replace />;
   return children;
