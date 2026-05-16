@@ -33,14 +33,13 @@ jobs:
           REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
           CI: ''        # prevent ESLint warnings from aborting the build
 
-      - name: SPA routing fallback — copy index.html to 404.html
+      - name: Verify SPA Worker is in build output
         working-directory: frontend
         run: |
-          cp build/index.html build/404.html
-          echo "/* /index.html 200" > build/_redirects
-          printf '/*\n  Cache-Control: no-store\n  X-Content-Type-Options: nosniff\n' > build/_headers
-          echo "Routing files ready:"
-          ls -la build/_redirects build/404.html build/_headers
+          echo "--- SPA routing files ---"
+          ls -la build/_worker.js build/_redirects 2>/dev/null || true
+          echo "--- _worker.js preview ---"
+          head -6 build/_worker.js
 
       - name: Create Cloudflare Pages project (if not exists)
         working-directory: frontend
