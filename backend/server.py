@@ -792,24 +792,41 @@ async def upload_profile_photo(request: Request, user: dict = Depends(get_curren
 
 @api.post("/memberships/request")
 async def request_membership(body: MembershipReqIn, user: dict = Depends(get_current_user)):
+    max_m = int(await get_config("max_parish_memberships") or "2")
     active = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "approved"})
     pending = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "pending"})
-    if active + pending >= 2:
-        raise HTTPException(400, "Maximum of 2 parish memberships allowed")
+    if active + pending >= max_m:
+        raise HTTPException(400, f"Maximum of {max_m} parish memberships allowed")
     existing = await db.parish_memberships.find_one({"user_id": user["id"], "parish_id": body.parish_id, "status": {"$in": ["pending", "approved"]}})
     if existing:
         raise HTTPException(400, "Already requested or member")
+    p = await db.parishes.find_one({"id": body.parish_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Parish not found")
+    global_mode = await get_config("global_join_mode") or "per_parish"
+    join_mode = p.get("join_mode", "open") if global_mode == "per_parish" else global_mode
+    status = "pending" if join_mode == "invite_only" else "approved"
+    approved_at = iso(now_utc()) if status == "approved" else None
     doc = {
         "id": new_id(),
         "user_id": user["id"],
         "parish_id": body.parish_id,
-        "status": "pending",
+        "status": status,
         "note": body.note,
+        "join_mode_used": join_mode,
         "created_at": iso(now_utc()),
     }
+    if approved_at:
+        doc["approved_at"] = approved_at
     await db.parish_memberships.insert_one(doc)
     doc.pop("_id", None)
-    return doc
+    if status == "approved":
+        await db.notifications.insert_one({
+            "id": new_id(), "user_id": user["id"], "title": "Parish membership confirmed",
+            "body": f"You have joined {p['name']}. Welcome home!",
+            "category": "membership", "read": False, "created_at": iso(now_utc()),
+        })
+    return {**doc, "joined": status == "approved", "pending": status == "pending", "parish_name": p.get("name")}
 
 
 @api.get("/memberships/pending")
@@ -828,14 +845,16 @@ async def approve_membership(mid: str, user: dict = Depends(require_roles("super
     m = await db.parish_memberships.find_one({"id": mid})
     if not m:
         raise HTTPException(404, "Not found")
+    max_m = int(await get_config("max_parish_memberships") or "2")
     active = await db.parish_memberships.count_documents({"user_id": m["user_id"], "status": "approved"})
-    if active >= 2:
-        raise HTTPException(400, "User already at 2 parish memberships")
+    if active >= max_m:
+        raise HTTPException(400, f"User already at {max_m} parish memberships")
     await db.parish_memberships.update_one({"id": mid}, {"$set": {"status": "approved", "approved_at": iso(now_utc())}})
+    p = await db.parishes.find_one({"id": m["parish_id"]}, {"_id": 0})
     await db.notifications.insert_one({
         "id": new_id(), "user_id": m["user_id"], "title": "Parish membership approved",
-        "body": "You have been approved to join the parish.", "category": "membership",
-        "read": False, "created_at": iso(now_utc()),
+        "body": f"You have been approved to join {p['name'] if p else 'the parish'}. Welcome home!",
+        "category": "membership", "read": False, "created_at": iso(now_utc()),
     })
     return {"ok": True}
 
@@ -1859,6 +1878,33 @@ async def resolve_report(rid: str, body: dict, actor: dict = Depends(require_rol
     return {"ok": True}
 
 
+# ---------------- Parish Settings (admin configurable) ----------------
+PARISH_SETTING_KEYS = ["max_parish_memberships", "global_join_mode", "join_state_match_required"]
+
+@api.get("/admin/parish-settings")
+async def get_parish_settings(actor: dict = Depends(require_roles("super_admin"))):
+    out = {}
+    for key in PARISH_SETTING_KEYS:
+        out[key] = await get_config(key)
+    return out
+
+@api.patch("/admin/parish-settings")
+async def update_parish_settings(body: dict, actor: dict = Depends(require_roles("super_admin"))):
+    updated = {}
+    for key in PARISH_SETTING_KEYS:
+        if key in body:
+            await set_config(key, str(body[key]))
+            updated[key] = str(body[key])
+    if not updated:
+        raise HTTPException(400, f"No valid keys provided. Allowed: {PARISH_SETTING_KEYS}")
+    await db.audit_logs.insert_one({
+        "id": new_id(), "actor_id": actor["id"], "actor_name": actor.get("name"),
+        "action": "parish_settings_update", "target": "parish_settings",
+        "details": updated, "created_at": iso(now_utc()),
+    })
+    return {"ok": True, "updated": updated}
+
+
 # ---------------- Audit Log ----------------
 @api.get("/admin/audit-logs")
 async def audit_logs(actor: dict = Depends(require_roles("super_admin"))):
@@ -2427,6 +2473,21 @@ async def on_startup():
             migrated_count += 1
     if migrated_count:
         print(f"[startup] Migrated {migrated_count} orphaned onboarding parish joins to approved memberships")
+
+    # Auto-approve pending memberships for open parishes (not invite_only)
+    # Ensures no user is stuck waiting for admin approval on open-join parishes
+    stale_pending = await db.parish_memberships.find({"status": "pending"}, {"_id": 0}).to_list(None)
+    auto_approved_count = 0
+    for sp in stale_pending:
+        sp_parish = await db.parishes.find_one({"id": sp["parish_id"]}, {"_id": 0})
+        if sp_parish and sp_parish.get("join_mode", "open") != "invite_only":
+            await db.parish_memberships.update_one(
+                {"id": sp["id"]},
+                {"$set": {"status": "approved", "approved_at": iso(now_utc()), "join_mode_used": sp_parish.get("join_mode", "open")}}
+            )
+            auto_approved_count += 1
+    if auto_approved_count:
+        print(f"[startup] Auto-approved {auto_approved_count} pending memberships for open parishes")
 
     # seed users
     admin_email = os.environ["ADMIN_EMAIL"]
