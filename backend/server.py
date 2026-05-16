@@ -2067,6 +2067,44 @@ async def delete_ai_document(did: str, actor: dict = Depends(require_roles("supe
     return {"ok": True}
 
 
+# ── AI Provider — supports Groq (free), Mistral, Together AI, Ollama, OpenAI ────
+_AI_PROVIDERS: Dict[str, Dict[str, str]] = {
+    "groq":    {"base_url": "https://api.groq.com/openai/v1",        "model": "llama-3.3-70b-versatile"},
+    "mistral": {"base_url": "https://api.mistral.ai/v1",             "model": "mistral-small-latest"},
+    "together":{"base_url": "https://api.together.xyz/v1",           "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"},
+    "ollama":  {"base_url": "http://localhost:11434/v1",             "model": "llama3"},
+    "openai":  {"base_url": "https://api.openai.com/v1",             "model": "gpt-4o-mini"},
+}
+
+async def _ai_complete(messages: list, max_tokens: int = 600, temperature: float = 0.7) -> Optional[str]:
+    """Call any OpenAI-compatible AI provider from admin config. Defaults to Groq (free)."""
+    provider = (await get_config("ai_provider") or "groq").lower()
+    api_key  = await get_config("ai_api_key")
+    defaults = _AI_PROVIDERS.get(provider, _AI_PROVIDERS["groq"])
+    base_url = ((await get_config("ai_base_url")) or defaults["base_url"]).rstrip("/")
+    model    = (await get_config("ai_model")) or defaults["model"]
+    if not api_key and provider != "ollama":
+        log.warning("[ai] No api_key set for provider '%s'", provider)
+        return None
+    try:
+        import httpx as _httpx
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        async with _httpx.AsyncClient(timeout=45) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+            )
+        if resp.status_code == 200:
+            return resp.json()["choices"][0]["message"]["content"]
+        log.error("[ai] provider=%s status=%s body=%s", provider, resp.status_code, resp.text[:300])
+    except Exception as ex:
+        log.error("[ai] _ai_complete error (%s): %s", provider, ex)
+    return None
+
+
 # ── AI Chat ──────────────────────────────────────────────────────────────
 _CPM_SYSTEM = """You are CPM Assistant — the friendly, knowledgeable AI guide for CelestialPeopleMeet (CPM), the official digital platform of the worldwide Celestial Church of Christ (CCC) community.
 
@@ -2086,10 +2124,13 @@ async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
     history = body.get("history", [])
     if not message:
         raise HTTPException(400, "message required")
-    openai_key = await get_config("openai_api_key")
-    if not openai_key:
-        return {"reply": "The CPM Assistant is not yet configured. Please ask your administrator to add an OpenAI API key in Admin → Integrations.", "error": True}
-    # Build context from uploaded knowledge-base docs
+    provider = (await get_config("ai_provider") or "groq").lower()
+    api_key  = await get_config("ai_api_key")
+    if not api_key and provider != "ollama":
+        return {
+            "reply": f"The CPM Assistant needs an API key. Go to Admin → Integrations, set the AI Provider to '{provider}' and paste your free API key.",
+            "error": True,
+        }
     docs = await db.ai_documents.find({}, {"_id": 0, "title": 1, "content": 1}).to_list(15)
     kb = ""
     if docs:
@@ -2102,21 +2143,10 @@ async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": str(h["content"])[:600]})
     messages.append({"role": "user", "content": message})
-    try:
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-                json={"model": "gpt-4o-mini", "messages": messages, "max_tokens": 600, "temperature": 0.7},
-            )
-        if resp.status_code != 200:
-            log.error("OpenAI error %s: %s", resp.status_code, resp.text[:300])
-            return {"reply": "I'm having trouble connecting right now. Please try again shortly.", "error": True}
-        return {"reply": resp.json()["choices"][0]["message"]["content"], "error": False}
-    except Exception as ex:
-        log.error("AI chat exception: %s", ex)
-        return {"reply": "I'm temporarily unavailable. Please try again in a moment.", "error": True}
+    reply = await _ai_complete(messages, max_tokens=600, temperature=0.7)
+    if reply:
+        return {"reply": reply, "error": False}
+    return {"reply": "I'm temporarily unavailable. Please try again in a moment.", "error": True}
 
 
 # ── Daily Scheduled Posts ────────────────────────────────────────────────
@@ -2133,34 +2163,25 @@ _DAILY_PROMPTS = {
     "music":    "Suggest one Celestial Church of Christ hymn or spiritual song by title, and explain in 2-3 sentences why this song is meaningful for worship today. If possible, include a line from the lyrics.",
 }
 
-async def _generate_daily_content(post_type: str, key: str) -> Optional[str]:
-    try:
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {"role": "system", "content": "You are a spiritual writer for the Celestial Church of Christ (CCC) worldwide community. Write with reverence and warmth."},
-                        {"role": "user", "content": _DAILY_PROMPTS.get(post_type, "Write a short spiritual encouragement for CCC members.")},
-                    ],
-                    "max_tokens": 280, "temperature": 0.82,
-                },
-            )
-        if resp.status_code == 200:
-            return resp.json()["choices"][0]["message"]["content"]
-    except Exception as ex:
-        log.error("[daily-post] generation error for %s: %s", post_type, ex)
-    return None
+async def _generate_daily_content(post_type: str) -> Optional[str]:
+    return await _ai_complete(
+        messages=[
+            {"role": "system", "content": "You are a spiritual writer for the Celestial Church of Christ (CCC) worldwide community. Write with reverence and warmth."},
+            {"role": "user",   "content": _DAILY_PROMPTS.get(post_type, "Write a short spiritual encouragement for CCC members.")},
+        ],
+        max_tokens=280, temperature=0.82,
+    )
 
 async def fire_daily_posts():
     """Generate and post daily devotionals, prayers, bible verses, and music to the global feed."""
-    enabled = await get_config("daily_posts_enabled")
-    key = await get_config("openai_api_key")
-    if enabled != "true" or not key:
-        log.info("[daily-posts] Skipped — not enabled or OpenAI key missing")
+    enabled  = await get_config("daily_posts_enabled")
+    provider = await get_config("ai_provider") or "groq"
+    api_key  = await get_config("ai_api_key")
+    if enabled != "true":
+        log.info("[daily-posts] Skipped — daily_posts_enabled is not 'true'")
+        return
+    if not api_key and provider != "ollama":
+        log.info("[daily-posts] Skipped — no AI API key configured")
         return
     sys_user = await db.users.find_one({"role": "super_admin"}, {"_id": 0})
     if not sys_user:
@@ -2171,7 +2192,7 @@ async def fire_daily_posts():
         existing = await db.feed_posts.find_one({"daily_post_type": pt["type"], "daily_post_date": today})
         if existing:
             continue
-        content = await _generate_daily_content(pt["type"], key)
+        content = await _generate_daily_content(pt["type"])
         if not content:
             continue
         await db.feed_posts.insert_one({
@@ -2248,11 +2269,16 @@ async def list_integrations(actor: dict = Depends(require_roles("super_admin")))
     out = []
     for it in items:
         v = (it.get("meta") or {}).get("value", "")
-        masked = v if it["label"] in {"resend_from_email", "google_maps_api_key_public", "vapid_public_key", "cloudflare_r2_public_url", "cloudflare_r2_bucket"} else (("…" + v[-4:]) if v else "")
+        _public_labels = {"resend_from_email", "google_maps_api_key_public", "vapid_public_key",
+                          "cloudflare_r2_public_url", "cloudflare_r2_bucket",
+                          "ai_provider", "ai_model", "ai_base_url",
+                          "daily_posts_enabled", "global_join_mode", "max_parish_memberships",
+                          "join_state_match_required"}
+        masked = v if it["label"] in _public_labels else (("…" + v[-4:]) if v else "")
         it["masked_value"] = masked
         it["has_value"] = bool(v)
         # remove raw value from response unless it's a public field
-        if it["label"] not in {"resend_from_email", "google_maps_api_key_public", "vapid_public_key", "cloudflare_r2_public_url", "cloudflare_r2_bucket"}:
+        if it["label"] not in _public_labels:
             it["meta"] = {"value": ""}
         out.append(it)
     return out
@@ -2807,8 +2833,11 @@ async def on_startup():
 
     # Seed AI / daily-posts config keys (no-op if already set)
     ai_defaults = [
-        {"label": "openai_api_key", "value": "", "description": "OpenAI API key for CPM Assistant and daily posts (sk-…)"},
-        {"label": "daily_posts_enabled", "value": "false", "description": "Set to 'true' to enable automatic daily devotion/prayer/bible/music posts to the global feed"},
+        {"label": "ai_provider",         "value": "groq",  "description": "AI provider: groq (free), mistral, together, ollama, openai"},
+        {"label": "ai_api_key",           "value": "",      "description": "API key for the chosen AI provider (free Groq key from console.groq.com)"},
+        {"label": "ai_model",             "value": "",      "description": "Model override (leave blank to use provider default e.g. llama-3.3-70b-versatile)"},
+        {"label": "ai_base_url",          "value": "",      "description": "Base URL override (leave blank to use provider default)"},
+        {"label": "daily_posts_enabled",  "value": "false", "description": "Set to 'true' to enable automatic daily devotion/prayer/verse/music posts"},
     ]
     for ai in ai_defaults:
         if not await get_config(ai["label"]):

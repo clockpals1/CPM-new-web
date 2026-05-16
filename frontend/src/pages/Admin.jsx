@@ -344,8 +344,11 @@ function AuditManager() {
 function IntegrationsManager() {
   const [items, setItems] = useState([]);
   const FIELDS = [
-    { group: "AI Assistant", label: "openai_api_key", title: "OpenAI API key", desc: "Used for the CPM Assistant chatbot and AI-generated daily feed posts. Get yours at platform.openai.com.", secret: true, placeholder: "sk-…" },
-    { label: "daily_posts_enabled", title: "Daily Posts enabled", desc: "Set to 'true' to enable automatic daily devotion/prayer/verse/music posts. Requires OpenAI key above.", secret: false, placeholder: "true" },
+    { group: "AI Assistant (Free — Groq / Llama)", label: "ai_provider", title: "AI Provider", desc: "groq (free, default) · mistral (free tier) · together (free tier) · ollama (self-hosted) · openai (paid). Sign up free at console.groq.com.", secret: false, placeholder: "groq" },
+    { label: "ai_api_key", title: "AI API Key", desc: "Paste your free Groq API key here (gsk_…). Get it free at console.groq.com — no credit card needed.", secret: true, placeholder: "gsk_…" },
+    { label: "ai_model", title: "AI Model (optional override)", desc: "Leave blank to use the provider default. Groq default: llama-3.3-70b-versatile. Mistral default: mistral-small-latest.", secret: false, placeholder: "llama-3.3-70b-versatile" },
+    { label: "ai_base_url", title: "AI Base URL (optional override)", desc: "Only needed for Ollama or custom deployments. Leave blank for all hosted providers.", secret: false, placeholder: "http://localhost:11434/v1" },
+    { label: "daily_posts_enabled", title: "Daily Posts enabled", desc: "Set to 'true' to auto-post daily devotion/prayer/verse/music to the Global Feed at 6am UTC. Requires AI API key above.", secret: false, placeholder: "true" },
     { group: "Parish Join Rules", label: "global_join_mode", title: "Global join mode", desc: "per_parish = each parish decides; open = anyone joins directly; location_based = same-country auto-approve; request_only = always admin approval.", secret: false, placeholder: "per_parish" },
     { label: "max_parish_memberships", title: "Max parish memberships per user", desc: "How many active + pending memberships a user may hold (default: 2).", secret: false, placeholder: "2" },
     { label: "join_state_match_required", title: "Require state match for location-based join", desc: "Set true to also require state/region match in addition to country (default: false).", secret: false, placeholder: "false" },
