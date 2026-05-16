@@ -965,6 +965,185 @@ function AIKnowledgeManager() {
   );
 }
 
+// ── CCC Hymns Import Manager ─────────────────────────────────────────────
+function HymnImportManager() {
+  const [raw, setRaw] = useState("");
+  const [replace, setReplace] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [hymns, setHymns] = useState([]);
+  const [loadingHymns, setLoadingHymns] = useState(true);
+  const [filter, setFilter] = useState("");
+
+  const loadHymns = () => {
+    setLoadingHymns(true);
+    http.get("/admin/ai/hymns")
+      .then((r) => setHymns(r.data))
+      .catch(() => {})
+      .finally(() => setLoadingHymns(false));
+  };
+  useEffect(() => { loadHymns(); }, []);
+
+  const parse = async () => {
+    if (!raw.trim()) return toast.error("Paste hymn source text first");
+    setBusy(true); setResult(null);
+    try {
+      const { data } = await http.post("/admin/ai/hymns/parse", { content: raw, replace });
+      setResult(data);
+      toast.success(`${data.parsed} hymn${data.parsed !== 1 ? "s" : ""} imported`);
+      setRaw(""); loadHymns();
+    } catch (e) { toast.error(formatErr(e)); } finally { setBusy(false); }
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm("Delete all stored hymns? This cannot be undone.")) return;
+    try {
+      const { data } = await http.delete("/admin/ai/hymns");
+      toast.success(`${data.deleted} hymn${data.deleted !== 1 ? "s" : ""} deleted`);
+      setHymns([]);
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const visible = filter
+    ? hymns.filter((h) =>
+        String(h.number).includes(filter) ||
+        (h.title || "").toLowerCase().includes(filter.toLowerCase()) ||
+        (h.opening_line || "").toLowerCase().includes(filter.toLowerCase())
+      )
+    : hymns;
+
+  const reserved = hymns.filter((h) => h.reserved).length;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)]">Knowledge Base</div>
+        <h2 className="font-display text-2xl text-[var(--brand-primary)]">CCC Hymn Import</h2>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">
+          Paste raw CCC Hymn Book text. Each hymn is parsed into a structured record that the AI uses to
+          answer hymn queries accurately. Reserved hymns return a fixed reply — no invented content.
+        </p>
+      </div>
+
+      {/* Format guide */}
+      <div className="card-surface p-4 border-l-4 border-[var(--brand-accent)] space-y-2">
+        <div className="text-xs font-semibold text-[var(--brand-primary)] uppercase tracking-wider">Expected Format</div>
+        <pre className="text-xs text-[var(--text-secondary)] font-mono whitespace-pre-wrap leading-relaxed">{
+`DEVOTION HYMNS          ← ALL-CAPS section header
+
+1 (Opening)             ← number (optional category)
+O Lord my God...        ← first lyric line = opening line
+Chorus:
+Alleluia...
+
+2
+Holy, holy, holy...
+
+Hymns 51-100 are reserved  ← reserved range notice
+
+51                      ← auto-marked reserved
+Reserved. Information will be provided soon.`
+        }</pre>
+      </div>
+
+      {/* Paste area */}
+      <div className="card-surface p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-xl text-[var(--brand-primary)] flex items-center gap-2">
+            <Upload size={15} /> Paste Hymn Source Text
+          </h3>
+          <span className="text-xs text-[var(--text-tertiary)]">{raw.length.toLocaleString()} chars</span>
+        </div>
+        <textarea
+          className="input-clean min-h-[260px] resize-y font-mono text-xs"
+          placeholder="Paste raw CCC hymn book text here…"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          data-testid="hymn-source-input"
+        />
+        <div className="flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="w-4 h-4" />
+            <span className="text-[var(--text-secondary)]">Replace all existing hymns (full re-import)</span>
+          </label>
+          <button
+            onClick={parse}
+            disabled={busy || !raw.trim()}
+            className="btn-primary inline-flex items-center gap-2 ml-auto"
+            data-testid="hymn-parse-btn"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />} Parse & Import
+          </button>
+        </div>
+        {result && (
+          <div className="rounded-lg p-3 bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">
+            ✓ {result.parsed} hymn{result.parsed !== 1 ? "s" : ""} imported{result.replaced ? " (all previous hymns replaced)" : " (upserted by number)"}.
+          </div>
+        )}
+      </div>
+
+      {/* Stored hymns */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-sm font-semibold text-[var(--brand-primary)] flex-1">
+            {hymns.length} hymn{hymns.length !== 1 ? "s" : ""} stored
+            {reserved > 0 && <span className="ml-2 text-xs text-amber-600 font-normal">· {reserved} reserved</span>}
+          </div>
+          <input
+            value={filter} onChange={(e) => setFilter(e.target.value)}
+            placeholder="Search by number or title…"
+            className="input-clean text-sm w-52"
+          />
+          <button onClick={loadHymns} className="text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-accent)] inline-flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+          {hymns.length > 0 && (
+            <button onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 inline-flex items-center gap-1">
+              <Trash2 size={11} /> Clear all
+            </button>
+          )}
+        </div>
+
+        {loadingHymns ? (
+          <div className="space-y-1 animate-pulse">
+            {[1, 2, 3].map((n) => <div key={n} className="card-surface h-12 rounded-lg" />)}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="card-surface p-8 text-center">
+            <BookOpen size={24} className="mx-auto text-[var(--text-tertiary)] mb-2" />
+            <p className="text-sm text-[var(--text-secondary)]">No hymns stored yet. Paste hymn source text above and import.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[var(--border-default)] border border-[var(--border-default)] rounded-xl overflow-hidden">
+            {visible.slice(0, 200).map((h) => (
+              <div key={h.number} className={`flex items-start gap-3 px-4 py-3 text-sm ${
+                h.reserved ? "bg-amber-50" : "bg-[var(--bg-paper)]"
+              }`} data-testid={`hymn-row-${h.number}`}>
+                <div className="w-10 shrink-0 text-right font-mono text-[var(--brand-primary)] font-semibold">{h.number}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-[var(--text-primary)] truncate">{h.title || h.opening_line || "(no title)"}</div>
+                  <div className="text-xs text-[var(--text-tertiary)] truncate">
+                    {h.section && <span>{h.section}</span>}
+                    {h.category && <span> · {h.category}</span>}
+                  </div>
+                </div>
+                {h.reserved && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium shrink-0">Reserved</span>
+                )}
+              </div>
+            ))}
+            {visible.length > 200 && (
+              <div className="px-4 py-2 text-xs text-[var(--text-tertiary)] text-center">
+                {visible.length - 200} more hymns not shown — use search to filter
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Daily Posts Manager ───────────────────────────────────────────────────
 function DailyPostsManager() {
   const [enabled, setEnabled] = useState("");
@@ -1242,6 +1421,7 @@ export default function Admin() {
     { k: "prayer-mod", l: "Prayer Wall", icon: Heart },
     { k: "choir-hub", l: "Choir Hub", icon: Music },
     { k: "ai-knowledge", l: "AI Knowledge Base", icon: Bot },
+    { k: "hymns", l: "CCC Hymns", icon: BookOpen },
     { k: "daily-posts", l: "Daily Posts", icon: Sparkles },
     { k: "cpmwave", l: "CPM Wave", icon: Music },
     { k: "integrations", l: "Integrations", icon: Zap },
@@ -1271,6 +1451,7 @@ export default function Admin() {
       {tab === "prayer-mod" && <PrayerModerationManager />}
       {tab === "choir-hub" && <ChoirHubManager />}
       {tab === "ai-knowledge" && <AIKnowledgeManager />}
+      {tab === "hymns" && <HymnImportManager />}
       {tab === "daily-posts" && <DailyPostsManager />}
       {tab === "cpmwave" && <CPMWaveManager />}
       {tab === "integrations" && <IntegrationsManager />}

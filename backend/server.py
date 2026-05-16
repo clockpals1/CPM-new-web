@@ -368,6 +368,7 @@ async def register(req: RegisterReq, response: Response):
     token = create_access_token(user_id, email, "member")
     set_auth_cookie(response, token)
     doc.pop("password_hash", None)
+    doc["access_token"] = token   # mobile clients use this as Bearer header
     return doc
 
 
@@ -381,6 +382,7 @@ async def login(req: LoginReq, response: Response):
     set_auth_cookie(response, token)
     user.pop("_id", None)
     user.pop("password_hash", None)
+    user["access_token"] = token   # mobile clients use this as Bearer header
     return user
 
 
@@ -2156,6 +2158,210 @@ async def delete_ai_document(did: str, actor: dict = Depends(require_roles("supe
     return {"ok": True}
 
 
+# ── CCC Hymns — Structured Knowledge Base ────────────────────────────────────
+import re as _re_hymn
+
+_RESERVED_PHRASES = ["reserved", "will be provided", "pending", "information will be", "not available"]
+
+def _parse_hymn_source(raw: str) -> list:
+    """
+    Parse raw CCC hymn text into one structured dict per hymn.
+    Handles: section headers, numbered hymns, reserved ranges, chorus/lyric lines.
+    """
+    # Pre-scan: collect explicit reserved ranges  e.g. "Hymns 51-100 are reserved"
+    reserved_ranges = []
+    for m in _re_hymn.finditer(
+        r'hymns?\s+(\d+)\s*[-\u2013to]+\s*(\d+)\s+(?:are\s+)?reserved',
+        raw, _re_hymn.IGNORECASE
+    ):
+        reserved_ranges.append((int(m.group(1)), int(m.group(2))))
+
+    hymns = []
+    current_section = "General"
+    current = None
+
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        # Section header: all-caps line, no leading digit, length > 3
+        if (
+            _re_hymn.match(r'^[A-Z][A-Z\s\(\)\-\/&]+$', line)
+            and not _re_hymn.match(r'^\d', line)
+            and len(line) > 3
+        ):
+            current_section = line.title()
+            continue
+
+        # Reserved range declaration (may also update ranges)
+        if any(ph in line.lower() for ph in _RESERVED_PHRASES):
+            rm = _re_hymn.search(r'hymns?\s+(\d+)\s*[-\u2013to]+\s*(\d+)', line, _re_hymn.IGNORECASE)
+            if rm:
+                reserved_ranges.append((int(rm.group(1)), int(rm.group(2))))
+            # Standalone reserved notice for current hymn
+            if current is not None and not rm:
+                current["reserved"] = True
+            continue
+
+        # Hymn-number line: "35" or "35." or "35 (Category)" or "35 - Title"
+        hm = _re_hymn.match(
+            r'^(\d{1,4})\.?\s*(?:\(([^)]*)\))?(?:\s*[-\u2013]\s*(.+))?$', line
+        )
+        if hm and 1 <= int(hm.group(1)) <= 9999:
+            if current is not None:
+                hymns.append(current)
+            num = int(hm.group(1))
+            category = (hm.group(2) or "").strip()
+            title_hint = (hm.group(3) or "").strip()
+            is_res = any(s <= num <= e for s, e in reserved_ranges)
+            current = {
+                "id": new_id(),
+                "number": num,
+                "section": current_section,
+                "category": category,
+                "title": title_hint,
+                "opening_line": "",
+                "lines": [],
+                "reserved": is_res,
+            }
+            continue
+
+        # Lyric / chorus content
+        if current is not None:
+            if not current["opening_line"] and not _re_hymn.match(r'^(?:chorus|verse|refrain)\s*:?', line, _re_hymn.IGNORECASE):
+                current["opening_line"] = line
+            current["lines"].append(line)
+
+    if current is not None:
+        hymns.append(current)
+
+    # Finalise records
+    result = []
+    for h in hymns:
+        h["lyrics_text"] = "\n".join(h["lines"])
+        del h["lines"]
+        if not h.get("title") and h.get("opening_line"):
+            h["title"] = h["opening_line"][:80]
+        h["created_at"] = iso(now_utc())
+        result.append(h)
+    return result
+
+
+@api.get("/admin/ai/hymns")
+async def list_hymns(actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    docs = await db.ai_hymns.find({}, {"_id": 0, "lyrics_text": 0}).sort("number", 1).to_list(2000)
+    return docs
+
+
+@api.post("/admin/ai/hymns/parse")
+async def import_hymns(body: dict, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    """Parse raw CCC hymn text and upsert structured records into ai_hymns collection."""
+    raw = (body.get("content") or "").strip()
+    if not raw:
+        raise HTTPException(400, "content required")
+    replace = body.get("replace", False)
+    parsed = _parse_hymn_source(raw)
+    if not parsed:
+        raise HTTPException(422, "No hymns could be parsed from the provided text. Check the format.")
+    if replace:
+        await db.ai_hymns.delete_many({})
+    # Upsert by number
+    for h in parsed:
+        await db.ai_hymns.update_one(
+            {"number": h["number"]},
+            {"$set": h},
+            upsert=True,
+        )
+    await db.ai_hymns.delete_many({"_id": {"$exists": True}, "id": {"$exists": False}})  # cleanup
+    return {"ok": True, "parsed": len(parsed), "replaced": replace}
+
+
+@api.delete("/admin/ai/hymns")
+async def clear_hymns(actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    res = await db.ai_hymns.delete_many({})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@api.get("/admin/ai/hymns/{num}")
+async def get_hymn(num: int, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    h = await db.ai_hymns.find_one({"number": num}, {"_id": 0})
+    if not h:
+        raise HTTPException(404, "Hymn not found")
+    return h
+
+
+async def _get_hymn_context(message: str) -> tuple:
+    """
+    Detect if message is a hymn query. Return (context_str, is_reserved).
+    Returns (None, False) if message is not a hymn query.
+    """
+    import re as _re2
+    RESERVED_REPLY = "RESERVED"
+    NOT_FOUND_REPLY = "NOT_FOUND"
+
+    # Pattern 1: "hymn 35", "hymn number 35", "hymn #35", "hymn no. 35"
+    nm = _re2.search(
+        r'\bhymn\s+(?:number|no\.?|#)?\s*#?(\d+)\b'
+        r'|\b(?:number|no\.?|#)\s*(\d+)\s+(?:in\s+the\s+)?hymn',
+        message, _re2.IGNORECASE,
+    )
+    hymn_num = None
+    if nm:
+        hymn_num = int(nm.group(1) or nm.group(2))
+    elif 'hymn' in message.lower():
+        # Fallback: bare number anywhere in a hymn-related message
+        bare = _re2.search(r'\b(\d{1,4})\b', message)
+        if bare:
+            hymn_num = int(bare.group(1))
+
+    hymn = None
+    if hymn_num is not None:
+        hymn = await db.ai_hymns.find_one({"number": hymn_num}, {"_id": 0})
+
+    # Pattern 2: title / opening-line search
+    if hymn is None:
+        stopwords = r'\b(?:hymn|what|is|the|sing|lyrics|words|tell|me|about|number|can|you|please|do|know|give|say|says|does|like)\b'
+        clean = _re2.sub(stopwords, '', message, flags=_re2.IGNORECASE).strip()
+        clean = _re2.sub(r'\s+', ' ', clean)
+        if len(clean) > 4:
+            hymn = await db.ai_hymns.find_one(
+                {"$or": [
+                    {"opening_line": {"$regex": clean[:40], "$options": "i"}},
+                    {"title": {"$regex": clean[:40], "$options": "i"}},
+                ]},
+                {"_id": 0},
+            )
+
+    # No hymn collection OR no match at all
+    total = await db.ai_hymns.count_documents({})
+    if total == 0:
+        # Hymn DB not yet seeded — fall through to raw-doc KB
+        return (None, False)
+
+    if hymn is None:
+        if 'hymn' in message.lower():
+            return (NOT_FOUND_REPLY, False)
+        return (None, False)
+
+    if hymn.get("reserved"):
+        return (RESERVED_REPLY, True)
+
+    # Build clean context block
+    parts = [f"CCC Hymn #{hymn['number']}"]
+    if hymn.get("section"):
+        parts.append(f"Section: {hymn['section']}")
+    if hymn.get("category"):
+        parts.append(f"Category: {hymn['category']}")
+    if hymn.get("title") and hymn["title"] != hymn.get("opening_line"):
+        parts.append(f"Title: {hymn['title']}")
+    if hymn.get("opening_line"):
+        parts.append(f"Opening Line: {hymn['opening_line']}")
+    if hymn.get("lyrics_text"):
+        parts.append(f"Lyrics:\n{hymn['lyrics_text'][:1800]}")
+    return ("\n".join(parts), False)
+
+
 # ── AI Provider — supports Groq (free), Mistral, Together AI, Ollama, OpenAI ────
 _AI_PROVIDERS: Dict[str, Dict[str, str]] = {
     "groq":    {"base_url": "https://api.groq.com/openai/v1",        "model": "llama-3.3-70b-versatile"},
@@ -2207,12 +2413,27 @@ YOUR ROLES:
 TONE: Warm, reverent, encouraging. You may greet with "Amen", "Hallelujah", or "Greetings in the name of our Lord". 
 LIMITS: Do not give medical advice, make up church doctrine, or discuss politics."""
 
+_HYMN_SYSTEM_NOTE = """
+HYMN RETRIEVAL RULES (mandatory):
+- You have been given structured hymn data from the CCC Hymn Book database above.
+- Answer ONLY from the provided hymn record. Do NOT invent or guess lyrics not shown.
+- If lyrics are partial, say "The hymn continues beyond what is stored here."
+- If a user asks for a hymn and the context says NOT_FOUND, say "I don't have that hymn in my database yet. Please check the printed CCC Hymn Book."
+- Never confuse section headings, chorus labels, or category notes for actual hymn lyrics.
+"""
+
 @api.post("/ai/chat")
 async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
     message = (body.get("message") or "").strip()[:2000]
     history = body.get("history", [])
     if not message:
         raise HTTPException(400, "message required")
+
+    # ── Hymn short-circuit ──────────────────────────────────────────────────
+    hymn_ctx, is_reserved = await _get_hymn_context(message)
+    if is_reserved:
+        return {"reply": "This hymn is reserved. Information will be provided soon.", "error": False}
+
     provider = (await get_config("ai_provider") or "groq").lower()
     api_key  = await get_config("ai_api_key")
     if not api_key and provider != "ollama":
@@ -2220,13 +2441,28 @@ async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
             "reply": f"The CPM Assistant needs an API key. Go to Admin → Integrations, set the AI Provider to '{provider}' and paste your free API key.",
             "error": True,
         }
-    docs = await db.ai_documents.find({}, {"_id": 0, "title": 1, "content": 1}).to_list(15)
+
+    # ── Build knowledge-base context block ──────────────────────────────────
     kb = ""
-    if docs:
-        kb = "\n\n=== UPLOADED KNOWLEDGE BASE ===\n"
-        for d in docs:
-            kb += f"\n## {d['title']}\n{d['content'][:2500]}\n"
-        kb += "\n=== END KNOWLEDGE BASE ==="
+    if hymn_ctx == "NOT_FOUND":
+        kb = "\n\n[HYMN DATABASE NOTE: The requested hymn is not yet stored. Tell the user their hymn was not found and suggest the printed CCC Hymn Book.]"
+    elif hymn_ctx:
+        # Structured hymn record takes priority over raw documents
+        kb = (
+            "\n\n=== CCC HYMN DATABASE RESULT ===\n"
+            + hymn_ctx
+            + "\n=== END HYMN ==="
+            + _HYMN_SYSTEM_NOTE
+        )
+    else:
+        # General query — use raw uploaded KB documents
+        docs = await db.ai_documents.find({}, {"_id": 0, "title": 1, "content": 1}).to_list(15)
+        if docs:
+            kb = "\n\n=== UPLOADED KNOWLEDGE BASE ===\n"
+            for d in docs:
+                kb += f"\n## {d['title']}\n{d['content'][:2500]}\n"
+            kb += "\n=== END KNOWLEDGE BASE ==="
+
     messages = [{"role": "system", "content": _CPM_SYSTEM + kb}]
     for h in (history or [])[-8:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
