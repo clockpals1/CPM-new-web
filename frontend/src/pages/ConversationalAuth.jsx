@@ -60,7 +60,10 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
     try {
       if (mode === "returning") {
         await login(data.email, data.password);
-        navigate("/app");
+        try {
+          const { data: mems } = await http.get("/me/memberships");
+          navigate(mems && mems.length > 0 ? "/app/my-parish" : "/app");
+        } catch (_) { navigate("/app"); }
       } else {
         await register({
           email: data.email,
@@ -233,7 +236,7 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
         </div>
         {mode === "returning" && (
           <div className="text-center mt-2">
-            <a href="/forgot-password" className="text-xs text-[var(--brand-accent)] underline" data-testid="forgot-link">Forgot your password?</a>
+            <Link to="/forgot-password" className="text-xs text-[var(--brand-accent)] underline" data-testid="forgot-link">Forgot your password?</Link>
           </div>
         )}
       </div>

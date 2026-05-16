@@ -113,20 +113,26 @@ export default function AppLayout({ children }) {
           </div>
         </header>
 
-        {/* Mobile bottom nav */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[var(--border-default)] flex justify-around py-1">
-          {NAV.slice(0, 5).map((n) => (
+        {/* Mobile bottom nav — 5 most-used actions */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[var(--border-default)] flex justify-around py-1 safe-area-inset-bottom">
+          {[
+            { to: "/app", label: "Home", icon: Home, end: true },
+            { to: "/app/my-parish", label: "My Parish", icon: Sparkles },
+            { to: "/app/parishes", label: "Parishes", icon: Church },
+            { to: "/app/prayer", label: "Prayer", icon: Heart },
+            { to: "/app/messages", label: "Messages", icon: MessageSquare },
+          ].map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
               end={n.end}
-              data-testid={`mobile-${n.testid}`}
+              data-testid={`mobile-nav-${n.label.toLowerCase().replace(" ", "-")}`}
               className={({ isActive }) =>
-                `flex flex-col items-center text-[10px] px-2 py-1 ${isActive ? "text-[var(--brand-primary)]" : "text-[var(--text-tertiary)]"}`
+                `flex flex-col items-center text-[10px] px-2 py-1.5 min-w-[52px] transition-colors ${isActive ? "text-[var(--brand-primary)]" : "text-[var(--text-tertiary)]"}`
               }
             >
-              <n.icon size={20} strokeWidth={1.7} />
-              <span className="mt-0.5">{n.label}</span>
+              <n.icon size={21} strokeWidth={1.6} />
+              <span className="mt-0.5 leading-none">{n.label}</span>
             </NavLink>
           ))}
         </nav>
