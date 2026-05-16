@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw, ExternalLink, Star } from "lucide-react";
 import { toast } from "sonner";
 
 const KEYS = [
@@ -1060,6 +1060,174 @@ function DailyPostsManager() {
   );
 }
 
+// ── CPM Wave Tracks Manager ───────────────────────────────────────────────────────────────
+const TRACK_CATEGORIES = ["hymn", "praise", "devotion", "choir", "oldies", "worship"];
+
+function CPMWaveManager() {
+  const [tracks, setTracks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ title: "", artist: "", url: "", category: "hymn", description: "", featured: false });
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    http.get("/admin/cpmwave/tracks")
+      .then((r) => setTracks(r.data))
+      .catch(() => toast.error("Could not load tracks"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!form.title.trim() || !form.url.trim()) { toast.error("Title and URL are required"); return; }
+    setSaving(true);
+    try {
+      const { data } = await http.post("/admin/cpmwave/tracks", form);
+      setTracks([data, ...tracks]);
+      setForm({ title: "", artist: "", url: "", category: "hymn", description: "", featured: false });
+      toast.success("Track added");
+    } catch (e) { toast.error(formatErr(e)); } finally { setSaving(false); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Remove this track?")) return;
+    try {
+      await http.delete(`/admin/cpmwave/tracks/${id}`);
+      setTracks(tracks.filter((t) => t.id !== id));
+      toast.success("Removed");
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const toggleFeatured = async (track) => {
+    try {
+      await http.patch(`/admin/cpmwave/tracks/${track.id}`, { featured: !track.featured });
+      setTracks(tracks.map((t) => t.id === track.id ? { ...t, featured: !t.featured } : t));
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)]">CPM Wave</div>
+        <h2 className="font-display text-2xl text-[var(--brand-primary)]">Music Library</h2>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">
+          Add tracks from <a href="https://cpmwave.com" target="_blank" rel="noopener noreferrer" className="text-[var(--brand-accent)] hover:underline inline-flex items-center gap-0.5">cpmwave.com <ExternalLink size={11} /></a>. The AI will share these randomly in daily music posts and members can browse them in the Music tab.
+        </p>
+      </div>
+
+      {/* Add track form */}
+      <div className="card-surface p-5 space-y-4">
+        <div className="text-sm font-semibold text-[var(--brand-primary)]">Add a Track</div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">Song Title *</label>
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="e.g. Oluwa Po Loore" className="input-clean text-sm w-full" />
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">Artist / Choir</label>
+            <input value={form.artist} onChange={(e) => setForm({ ...form, artist: e.target.value })}
+              placeholder="e.g. CCC Makoko Choir" className="input-clean text-sm w-full" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-tertiary)] block mb-1">CPM Wave URL *</label>
+          <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
+            placeholder="https://cpmwave.com/music/track/..." className="input-clean text-sm w-full font-mono" />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-[var(--text-tertiary)] block mb-1">Category</label>
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input-clean text-sm w-full">
+              {TRACK_CATEGORIES.map((c) => <option key={c} value={c} className="capitalize">{c}</option>)}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} className="w-4 h-4" />
+              <span className="text-[var(--text-secondary)]">Feature on Music Discover page</span>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-tertiary)] block mb-1">Description (optional)</label>
+          <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Brief note about the track" className="input-clean text-sm w-full" />
+        </div>
+        <button onClick={add} disabled={saving || !form.title.trim() || !form.url.trim()}
+          className="btn-primary text-sm inline-flex items-center gap-2">
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add Track
+        </button>
+      </div>
+
+      {/* Shortcut examples */}
+      <div className="card-surface p-4 space-y-2">
+        <div className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">Paste these URLs to get started</div>
+        {[
+          { title: "Oluwa Po Loore", artist: "CCC Makoko Choir", url: "https://cpmwave.com/music/track/oluwa-po-loore-by-ccc-makoko" },
+          { title: "Ijo Mimo", artist: "Seyi Solagbade", url: "https://cpmwave.com/music/track/seyi_solagbade-ijo_mimo-ijo_mimo" },
+          { title: "Celestial Oldies", artist: "HOD", url: "https://cpmwave.com/music/track/celestial-oldies" },
+          { title: "Moti Moyin Tele Oluwa Olugbala", artist: "Bro Bro (Steve Pelemo)", url: "https://cpmwave.com/music/track/bro_bro_-_steve_pelemo-moti_moyin_tele-oluwa_olugbala" },
+        ].map((s, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <button onClick={() => setForm({ ...form, title: s.title, artist: s.artist, url: s.url })}
+              className="text-xs px-2.5 py-1 rounded border border-[var(--brand-accent)] text-[var(--brand-accent)] hover:bg-amber-50 transition-colors">
+              Use
+            </button>
+            <span className="text-xs text-[var(--text-primary)] font-medium">{s.title}</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{s.artist}</span>
+            <a href={s.url} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-accent)]"><ExternalLink size={11} /></a>
+          </div>
+        ))}
+      </div>
+
+      {/* Track list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-[var(--brand-primary)]">{tracks.length} track{tracks.length !== 1 ? "s" : ""} in library</div>
+          <button onClick={load} className="text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-accent)] inline-flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </div>
+        {loading ? (
+          <div className="space-y-2 animate-pulse">{[1, 2, 3].map((n) => <div key={n} className="card-surface h-16 rounded-xl" />)}</div>
+        ) : tracks.length === 0 ? (
+          <div className="card-surface p-8 text-center text-sm text-[var(--text-secondary)]">
+            No tracks yet. Add the first one above.
+          </div>
+        ) : (
+          tracks.map((t) => (
+            <div key={t.id} className="card-surface p-4 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-[var(--brand-primary)] truncate">{t.title}</span>
+                  {t.featured && <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium shrink-0">Featured</span>}
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--bg-subtle)] text-[var(--text-tertiary)] capitalize shrink-0">{t.category}</span>
+                </div>
+                {t.artist && <div className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{t.artist}</div>}
+                <a href={t.url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-[var(--brand-accent)] hover:underline inline-flex items-center gap-0.5 mt-0.5 truncate max-w-xs">
+                  {t.url.replace("https://", "")} <ExternalLink size={10} />
+                </a>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => toggleFeatured(t)} title={t.featured ? "Unfeature" : "Feature"}
+                  className={`p-1.5 rounded hover:bg-[var(--bg-subtle)] transition-colors ${t.featured ? "text-amber-500" : "text-[var(--text-tertiary)]"}`}>
+                  <Star size={14} fill={t.featured ? "currentColor" : "none"} />
+                </button>
+                <button onClick={() => remove(t.id)}
+                  className="p-1.5 rounded hover:bg-[var(--bg-subtle)] text-red-400 hover:text-red-600">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const TABS = [
@@ -1075,6 +1243,7 @@ export default function Admin() {
     { k: "choir-hub", l: "Choir Hub", icon: Music },
     { k: "ai-knowledge", l: "AI Knowledge Base", icon: Bot },
     { k: "daily-posts", l: "Daily Posts", icon: Sparkles },
+    { k: "cpmwave", l: "CPM Wave", icon: Music },
     { k: "integrations", l: "Integrations", icon: Zap },
     { k: "audit", l: "Audit Log", icon: History },
   ];
@@ -1103,6 +1272,7 @@ export default function Admin() {
       {tab === "choir-hub" && <ChoirHubManager />}
       {tab === "ai-knowledge" && <AIKnowledgeManager />}
       {tab === "daily-posts" && <DailyPostsManager />}
+      {tab === "cpmwave" && <CPMWaveManager />}
       {tab === "integrations" && <IntegrationsManager />}
       {tab === "audit" && <AuditManager />}
     </div>

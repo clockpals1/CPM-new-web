@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
+import FeedCard from "../components/FeedCard";
+import MediaUploader from "../components/MediaUploader";
 
 // ─── Post type catalogue ──────────────────────────────────────────────────────
 const POST_TYPES = [
@@ -116,25 +118,32 @@ function ParishPulse({ membership }) {
 function FeedComposer({ user, parishId, onPosted }) {
   const [text, setText] = useState("");
   const [postType, setPostType] = useState("member_post");
+  const [mediaUrls, setMediaUrls] = useState([]);
   const [busy, setBusy] = useState(false);
   const availableTypes = POST_TYPES.filter((t) => !t.adminOnly || isAdmin(user));
 
   const submit = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && !mediaUrls.length) return;
     setBusy(true);
     try {
-      const { data } = await http.post("/posts", { body: text, scope: "parish", parish_id: parishId, post_type: postType });
+      const { data } = await http.post("/posts", {
+        body: text,
+        scope: "parish",
+        parish_id: parishId,
+        post_type: postType,
+        media_urls: mediaUrls.map((m) => m.url),
+      });
+      data.media_urls = mediaUrls;
       onPosted(data);
-      setText("");
-      setPostType("member_post");
+      setText(""); setPostType("member_post"); setMediaUrls([]);
     } catch (e) { toast.error(formatErr(e)); } finally { setBusy(false); }
   };
 
   const ti = typeInfo(postType);
   return (
-    <div className="card-surface p-4 sm:p-5" data-testid="feed-composer">
+    <div className="card-surface p-4 sm:p-5 space-y-3" data-testid="feed-composer">
       {availableTypes.length > 1 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
+        <div className="flex flex-wrap gap-1.5">
           {availableTypes.map((t) => (
             <button key={t.id} onClick={() => setPostType(t.id)} data-testid={`type-btn-${t.id}`}
               className={`text-xs px-2.5 py-1 rounded-full border transition-all ${postType === t.id ? `${t.bg} ${t.color} border-current font-medium` : "border-[var(--border-default)] text-[var(--text-tertiary)] hover:border-[var(--brand-primary)]"}`}>
@@ -144,16 +153,17 @@ function FeedComposer({ user, parishId, onPosted }) {
         </div>
       )}
       {postType !== "member_post" && (
-        <div className={`text-xs px-3 py-1.5 rounded-md mb-2 ${ti.bg} ${ti.color} font-medium`}>
+        <div className={`text-xs px-3 py-1.5 rounded-md ${ti.bg} ${ti.color} font-medium`}>
           Posting as: {ti.label}
         </div>
       )}
       <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && e.ctrlKey && submit()}
         placeholder={postType === "announcement" ? "Write a parish announcement…" : postType === "worship_reminder" ? "Share a worship or service reminder…" : "Share with your parish… Alleluia!"}
         className="input-clean min-h-[80px] w-full text-sm" data-testid="feed-composer-input" />
-      <div className="flex justify-between items-center mt-3">
+      <MediaUploader mediaUrls={mediaUrls} onChange={setMediaUrls} />
+      <div className="flex justify-between items-center">
         <span className="text-[10px] text-[var(--text-tertiary)]">Ctrl+Enter to post</span>
-        <button onClick={submit} disabled={busy || !text.trim()} className="btn-primary text-sm inline-flex items-center gap-2" data-testid="feed-composer-submit">
+        <button onClick={submit} disabled={busy || (!text.trim() && !mediaUrls.length)} className="btn-primary text-sm inline-flex items-center gap-2" data-testid="feed-composer-submit">
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />} Post
         </button>
       </div>
@@ -411,7 +421,7 @@ export default function ParishFeed() {
       {pinnedPosts.length > 0 && (
         <div className="space-y-2" data-testid="pinned-section">
           <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--brand-accent)] font-semibold flex items-center gap-1.5"><Pin size={10} /> Pinned</div>
-          {pinnedPosts.map((p) => <FeedPostCard key={p.id} post={p} user={user} onDelete={handleDelete} onPin={handlePin} onEdit={handleEdit} />)}
+          {pinnedPosts.map((p) => <FeedCard key={p.id} post={p} user={user} onDelete={handleDelete} onPin={handlePin} onEdit={handleEdit} />)}
         </div>
       )}
 
@@ -439,7 +449,7 @@ export default function ParishFeed() {
             <p className="text-sm text-[var(--text-secondary)] max-w-xs mx-auto">Be the first to share something with your parish community. Alleluia!</p>
           </div>
         )}
-        {regularPosts.map((p) => <FeedPostCard key={p.id} post={p} user={user} onDelete={handleDelete} onPin={handlePin} onEdit={handleEdit} />)}
+        {regularPosts.map((p) => <FeedCard key={p.id} post={p} user={user} onDelete={handleDelete} onPin={handlePin} onEdit={handleEdit} />)}
       </div>
 
       {/* Pending notice */}

@@ -179,11 +179,13 @@ class SettingItemIn(BaseModel):
 
 class PostIn(BaseModel):
     body: str
-    media: Optional[List[str]] = []  # base64 strings
+    title: Optional[str] = ""
+    media_urls: Optional[List[str]] = []   # R2/CDN URLs for images/videos
+    media: Optional[List[str]] = []        # base64 strings (legacy)
     scope: Literal["parish", "global"] = "parish"
     parish_id: Optional[str] = None
     visibility: Optional[str] = "members"  # members, announcement, leaders
-    post_type: Optional[str] = "member_post"  # member_post|announcement|worship_reminder|event_promo|testimony_preview|choir_update|service_notice|prayer_highlight
+    post_type: Optional[str] = "member_post"
     image_url: Optional[str] = ""
 
 
@@ -2041,6 +2043,93 @@ async def import_settings_bulk(key: str, body: List[str], actor: dict = Depends(
     return {"added": added, "skipped": skipped}
 
 
+# ── Post Media Upload ──────────────────────────────────────────────────────
+_POST_MEDIA_MAX = 10 * 1024 * 1024  # 10 MB
+_POST_MEDIA_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp",
+                     "video/mp4", "video/quicktime", "video/webm", "video/ogg"}
+
+@api.post("/posts/media")
+async def upload_post_media(request: Request, user: dict = Depends(get_current_user)):
+    """Upload an image or short video (max 10 MB) to attach to a post. Returns {url, type}."""
+    from fastapi import UploadFile
+    ct_hdr = request.headers.get("content-type", "")
+    if "multipart/form-data" not in ct_hdr:
+        raise HTTPException(400, "multipart/form-data required")
+    form = await request.form()
+    file: UploadFile = form.get("file")
+    if not file:
+        raise HTTPException(400, "No file in form")
+    data = await file.read()
+    if len(data) > _POST_MEDIA_MAX:
+        raise HTTPException(413, f"File exceeds 10 MB (got {len(data)//1024//1024:.1f} MB)")
+    ct = (file.content_type or "").split(";")[0].strip().lower()
+    if ct not in _POST_MEDIA_TYPES:
+        raise HTTPException(415, f"Unsupported file type '{ct}'. Allowed: images and short videos.")
+    is_video = ct.startswith("video/")
+    folder = "post-videos" if is_video else "post-images"
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() or ("mp4" if is_video else "jpg")
+    key = f"{folder}/{user['id']}/{new_id()}.{ext}"
+    r2_url = (await get_config("cloudflare_r2_public_url") or "").rstrip("/")
+    try:
+        import boto3, botocore.config
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=await get_config("cloudflare_r2_endpoint") or os.environ.get("R2_ENDPOINT", ""),
+            aws_access_key_id=await get_config("cloudflare_r2_access_key") or os.environ.get("R2_ACCESS_KEY", ""),
+            aws_secret_access_key=await get_config("cloudflare_r2_secret") or os.environ.get("R2_SECRET_KEY", ""),
+            config=botocore.config.Config(signature_version="s3v4"),
+            region_name="auto",
+        )
+        bucket = await get_config("cloudflare_r2_bucket") or os.environ.get("R2_BUCKET", "")
+        s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=ct)
+        url = f"{r2_url}/{key}" if r2_url else ""
+    except Exception as e:
+        log.warning("[post-media] R2 upload failed: %s — returning data-uri fallback", e)
+        import base64 as _b64
+        url = f"data:{ct};base64,{_b64.b64encode(data).decode()}"
+    return {"url": url, "type": "video" if is_video else "image", "size_bytes": len(data)}
+
+
+# ── CPM Wave Tracks (admin-managed) ──────────────────────────────────────────
+@api.get("/cpmwave/tracks")
+async def list_cpmwave_tracks(user: dict = Depends(get_current_user)):
+    return await db.cpmwave_tracks.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+@api.get("/admin/cpmwave/tracks")
+async def admin_list_tracks(actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    return await db.cpmwave_tracks.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+@api.post("/admin/cpmwave/tracks")
+async def admin_add_track(body: dict, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    title = (body.get("title") or "").strip()
+    url   = (body.get("url") or "").strip()
+    if not title or not url:
+        raise HTTPException(400, "title and url required")
+    doc = {
+        "id": new_id(), "title": title,
+        "artist": (body.get("artist") or "").strip(),
+        "category": (body.get("category") or "hymn").strip(),
+        "description": (body.get("description") or "").strip(),
+        "url": url, "featured": bool(body.get("featured", False)),
+        "added_by": actor.get("name", ""), "created_at": iso(now_utc()),
+    }
+    await db.cpmwave_tracks.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.patch("/admin/cpmwave/tracks/{tid}")
+async def admin_update_track(tid: str, body: dict, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    allowed = {"title", "artist", "category", "description", "url", "featured"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    await db.cpmwave_tracks.update_one({"id": tid}, {"$set": updates})
+    return {"ok": True}
+
+@api.delete("/admin/cpmwave/tracks/{tid}")
+async def admin_delete_track(tid: str, actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    await db.cpmwave_tracks.delete_one({"id": tid})
+    return {"ok": True}
+
+
 # ── AI Knowledge Base Documents ──────────────────────────────────────────
 @api.get("/admin/ai/documents")
 async def list_ai_documents(actor: dict = Depends(require_roles("super_admin", "parish_admin"))):
@@ -2149,67 +2238,170 @@ async def ai_chat(body: dict, user: dict = Depends(get_current_user)):
     return {"reply": "I'm temporarily unavailable. Please try again in a moment.", "error": True}
 
 
+# ── Helpers — AI text cleaning & structure parsing ───────────────────────────
+import re as _re
+
+def _strip_md(text: str) -> str:
+    """Strip markdown artifacts from AI-generated text so it reads as plain prose."""
+    text = _re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', text)
+    text = _re.sub(r'^#{1,6}\s+', '', text, flags=_re.MULTILINE)
+    text = _re.sub(r'^[\-\*]\s+', '', text, flags=_re.MULTILINE)
+    text = _re.sub(r'\n{3,}', '\n\n', text)
+    text = _re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
+    return text.strip()
+
+def _parse_structured_post(raw: str) -> dict:
+    """Parse labelled AI response (TITLE: / BODY: / VERSE: / REFLECTION: / SONG: / PRAYER: / CTA:)."""
+    fields: dict = {}
+    current_key = None; buffer: list = []
+    KEYS = {"TITLE", "INTRO", "BODY", "VERSE", "REFLECTION", "SONG", "PRAYER", "CTA", "CTA_URL"}
+    for line in raw.splitlines():
+        matched = False
+        for k in KEYS:
+            if line.upper().startswith(f"{k}:"):
+                if current_key:
+                    fields[current_key.lower()] = _strip_md("\n".join(buffer).strip())
+                current_key = k; buffer = [line[len(k)+1:].strip()]; matched = True; break
+        if not matched and current_key:
+            buffer.append(line)
+    if current_key:
+        fields[current_key.lower()] = _strip_md("\n".join(buffer).strip())
+    return fields
+
 # ── Daily Scheduled Posts ────────────────────────────────────────────────
 _DAILY_TYPES = [
-    {"type": "devotion",   "label": "Daily Devotion",       "emoji": "✝️"},
-    {"type": "prayer",     "label": "Morning Prayer",        "emoji": "🙏"},
-    {"type": "bible",      "label": "Verse of the Day",      "emoji": "📖"},
-    {"type": "music",      "label": "Music for the Day",     "emoji": "🎵"},
+    {"type": "devotion", "label": "Daily Devotion",  "emoji": "✝️",  "color": "navy"},
+    {"type": "prayer",   "label": "Morning Prayer",   "emoji": "🙏",  "color": "rose"},
+    {"type": "bible",    "label": "Verse of the Day", "emoji": "📖",  "color": "amber"},
+    {"type": "music",    "label": "Music for the Day","emoji": "🎵",  "color": "teal"},
 ]
+
 _DAILY_PROMPTS = {
-    "devotion": "Write a short, uplifting daily devotion (4-5 sentences) for Celestial Church of Christ members worldwide. Include a Bible verse reference. Warm and encouraging tone.",
-    "prayer":   "Write a short morning prayer (5-7 sentences) for CCC members to pray together today. Begin with 'Heavenly Father' or 'Lord God Almighty'. Reverent and faith-building.",
-    "bible":    "Share one Bible verse (full reference) meaningful for CCC members today, followed by 2-3 sentences of reflection on its spiritual significance.",
-    "music":    "Suggest one Celestial Church of Christ hymn or spiritual song by title, and explain in 2-3 sentences why this song is meaningful for worship today. If possible, include a line from the lyrics.",
+    "devotion": """Write a daily devotion for Celestial Church of Christ members worldwide.
+Format your response EXACTLY like this (no ** or ## or bullet points):
+TITLE: [A short inspiring title, max 8 words]
+INTRO: [One sentence that draws the reader in]
+BODY: [2-3 sentences of devotional content. Plain prose, no symbols.]
+VERSE: [One Bible verse with full reference in parentheses]
+REFLECTION: [One brief closing sentence of encouragement]""",
+
+    "prayer": """Write a morning prayer for Celestial Church of Christ members to pray together today.
+Format your response EXACTLY like this (no ** or ## or bullet points):
+TITLE: [Short prayer title, max 8 words]
+INTRO: [One sentence setting the spiritual context]
+PRAYER: [3-4 sentences of the prayer itself. Reverently written. Begin with 'Heavenly Father' or 'Lord God'.]
+VERSE: [A supporting Bible verse with reference]
+REFLECTION: [One encouraging closing sentence]""",
+
+    "bible": """Share a verse of the day for Celestial Church of Christ members.
+Format your response EXACTLY like this (no ** or ## or bullet points):
+TITLE: [Short engaging title for today's verse]
+VERSE: [The Bible verse in full, with book, chapter and verse reference in parentheses]
+BODY: [2-3 sentences of reflection on its meaning for CCC members today]
+REFLECTION: [One short personal application sentence]""",
+
+    "music": """Suggest a Celestial Church of Christ hymn or spiritual song for today.
+Format your response EXACTLY like this (no ** or ## or bullet points):
+TITLE: [Song title]
+SONG: [Artist or choir name who performs it]
+BODY: [2-3 sentences about why this song is meaningful for CCC worship today]
+VERSE: [A Bible verse that connects to the song's theme]
+CTA: Listen on CPM Wave
+CTA_URL: https://cpmwave.com""",
 }
 
-async def _generate_daily_content(post_type: str) -> Optional[str]:
-    return await _ai_complete(
+async def _generate_daily_content(post_type: str) -> Optional[dict]:
+    """Generate a structured daily post dict {title, intro, body, verse, reflection, cta, cta_url}."""
+    prompt = _DAILY_PROMPTS.get(post_type, "Write a short spiritual encouragement for CCC members.")
+    raw = await _ai_complete(
         messages=[
-            {"role": "system", "content": "You are a spiritual writer for the Celestial Church of Christ (CCC) worldwide community. Write with reverence and warmth."},
-            {"role": "user",   "content": _DAILY_PROMPTS.get(post_type, "Write a short spiritual encouragement for CCC members.")},
+            {"role": "system", "content": "You are a spiritual editor for the Celestial Church of Christ worldwide community. Follow the given format exactly. Write clean, plain prose without any markdown symbols."},
+            {"role": "user",   "content": prompt},
         ],
-        max_tokens=280, temperature=0.82,
+        max_tokens=380, temperature=0.78,
     )
+    if not raw:
+        return None
+    fields = _parse_structured_post(raw)
+    # Enrich music posts with a random CPM Wave track if available
+    if post_type == "music" and not fields.get("cta_url"):
+        track = await db.cpmwave_tracks.find_one({}, sort=[("_id", -1)])
+        if track:
+            fields["cta"] = f"Listen: {track['title']}"
+            fields["cta_url"] = track.get("url", "https://cpmwave.com")
+        else:
+            fields["cta"] = "Listen on CPM Wave"
+            fields["cta_url"] = "https://cpmwave.com"
+    return fields
+
 
 async def fire_daily_posts():
-    """Generate and post daily devotionals, prayers, bible verses, and music to the global feed."""
+    """Generate structured daily posts and publish to the global feed."""
     enabled  = await get_config("daily_posts_enabled")
     provider = await get_config("ai_provider") or "groq"
     api_key  = await get_config("ai_api_key")
     if enabled != "true":
-        log.info("[daily-posts] Skipped — daily_posts_enabled is not 'true'")
-        return
+        log.info("[daily-posts] Skipped — daily_posts_enabled is not 'true'"); return
     if not api_key and provider != "ollama":
-        log.info("[daily-posts] Skipped — no AI API key configured")
-        return
+        log.info("[daily-posts] Skipped — no AI API key"); return
     sys_user = await db.users.find_one({"role": "super_admin"}, {"_id": 0})
     if not sys_user:
-        log.warning("[daily-posts] No super_admin found to author posts")
-        return
+        log.warning("[daily-posts] No super_admin found"); return
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for pt in _DAILY_TYPES:
-        existing = await db.feed_posts.find_one({"daily_post_type": pt["type"], "daily_post_date": today})
-        if existing:
+        if await db.feed_posts.find_one({"daily_post_type": pt["type"], "daily_post_date": today}):
             continue
-        content = await _generate_daily_content(pt["type"])
-        if not content:
+        fields = await _generate_daily_content(pt["type"])
+        if not fields:
             continue
-        await db.feed_posts.insert_one({
+        # Build clean body from parsed fields (no markdown)
+        body_parts = []
+        if fields.get("intro"): body_parts.append(fields["intro"])
+        if fields.get("body"):  body_parts.append(fields["body"])
+        if fields.get("prayer"): body_parts.append(fields["prayer"])
+        if fields.get("reflection"): body_parts.append(fields["reflection"])
+        clean_body = "\n\n".join(body_parts)
+        doc = {
             "id": new_id(),
             "user_id": sys_user["id"], "user_name": "CPM Community",
-            "body": f"{pt['emoji']} **{pt['label']}**\n\n{content}",
+            "title": fields.get("title", pt["label"]),
+            "body": clean_body,
+            "daily_verse": fields.get("verse", ""),
+            "daily_song": fields.get("song", ""),
+            "cta_label": fields.get("cta", ""),
+            "cta_url": fields.get("cta_url", ""),
             "scope": "global", "pinned": False,
-            "daily_post_type": pt["type"], "daily_post_date": today,
+            "post_type": "daily_"+pt["type"],
+            "daily_post_type": pt["type"],
+            "daily_post_date": today,
+            "daily_post_category": pt["label"],
+            "daily_post_emoji": pt["emoji"],
+            "daily_post_color": pt["color"],
+            "media_urls": [],
             "reactions": {"amen": 0, "hallelujah": 0, "fire": 0, "pray": 0},
-            "comments": [], "created_at": iso(now_utc()),
-        })
-        log.info("[daily-posts] Posted %s for %s", pt["type"], today)
+            "comment_count": 0, "created_at": iso(now_utc()),
+        }
+        await db.feed_posts.insert_one(doc)
+        log.info("[daily-posts] Posted %s '%s' for %s", pt["type"], doc["title"], today)
+        # Push notification to all members
+        try:
+            all_users = await db.users.find({}, {"id": 1}).to_list(5000)
+            notifs = [{
+                "id": new_id(), "user_id": u["id"],
+                "title": f"{pt['emoji']} {pt['label']}: {doc['title']}",
+                "body": (clean_body[:100] + "…") if len(clean_body) > 100 else clean_body,
+                "category": "daily_post", "read": False, "created_at": iso(now_utc()),
+            } for u in all_users]
+            if notifs:
+                await db.notifications.insert_many(notifs)
+        except Exception as ne:
+            log.warning("[daily-posts] Notification error: %s", ne)
 
 @api.post("/admin/daily-posts/trigger")
 async def trigger_daily_posts(actor: dict = Depends(require_roles("super_admin"))):
     """Manually trigger today's daily posts."""
     import asyncio as _asyncio
+    # ... (rest of the code remains the same)
     _asyncio.create_task(fire_daily_posts())
     return {"ok": True, "message": "Daily posts generation started in background"}
 
