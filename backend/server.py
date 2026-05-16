@@ -133,11 +133,15 @@ class RegisterReq(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     name: str
+    sex: Optional[str] = None          # 'male' | 'female'
     ccc_rank: Optional[str] = None
     country: Optional[str] = None
     city: Optional[str] = None
     parish_id: Optional[str] = None
     parish_request: Optional[str] = None
+    parish_shepherd_name: Optional[str] = None
+    parish_phone: Optional[str] = None
+    parish_address: Optional[str] = None
     interested_in_choir: Optional[bool] = False
     profile_summary: Optional[str] = None
 
@@ -319,6 +323,7 @@ async def register(req: RegisterReq, response: Response):
         "email": email,
         "password_hash": hash_password(req.password),
         "name": req.name.strip(),
+        "sex": req.sex or "",
         "ccc_rank": req.ccc_rank or "",
         "country": req.country or "",
         "city": req.city or "",
@@ -361,6 +366,9 @@ async def register(req: RegisterReq, response: Response):
             "suggestion": req.parish_request,
             "country": req.country,
             "city": req.city,
+            "shepherd_name": req.parish_shepherd_name or "",
+            "phone": req.parish_phone or "",
+            "address": req.parish_address or "",
             "status": "pending",
             "created_at": iso(now_utc()),
         })
