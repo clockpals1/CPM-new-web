@@ -1,6 +1,6 @@
 import React, { useEffect, Component } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Landing from "./pages/Landing";
@@ -45,7 +45,7 @@ class ErrorBoundary extends Component {
             <div style={{ fontSize: "2rem", marginBottom: "1rem" }}>✞</div>
             <div style={{ fontFamily: "serif", fontSize: "1.4rem", color: "#0F1E38", marginBottom: "0.5rem" }}>Something went wrong</div>
             <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1.5rem" }}>Please refresh the page or go back to continue.</p>
-            <button onClick={() => window.location.href = "/app"} style={{ background: "#0F1E38", color: "white", border: "none", padding: "0.6rem 1.5rem", borderRadius: "6px", cursor: "pointer", fontSize: "0.875rem" }}>Go Home</button>
+            <button onClick={() => { window.location.hash = "/app"; window.location.reload(); }} style={{ background: "#0F1E38", color: "white", border: "none", padding: "0.6rem 1.5rem", borderRadius: "6px", cursor: "pointer", fontSize: "0.875rem" }}>Go Home</button>
           </div>
         </div>
       );
@@ -75,7 +75,7 @@ function App() {
   return (
     <ErrorBoundary>
     <AuthProvider>
-      <BrowserRouter>
+      <HashRouter>
         <Toaster richColors position="top-right" />
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -108,7 +108,7 @@ function App() {
           <Route path="/app/admin" element={<AdminGate><AppLayout><Admin /></AppLayout></AdminGate>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </AuthProvider>
     </ErrorBoundary>
   );

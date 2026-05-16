@@ -11,7 +11,7 @@ export function ForgotPassword() {
   const submit = async () => {
     setBusy(true);
     try {
-      await http.post("/auth/forgot-password", { email, origin: window.location.origin });
+      await http.post("/auth/forgot-password", { email, origin: window.location.origin + "/#" });
       setSent(true);
     } catch (e) { toast.error(formatErr(e)); } finally { setBusy(false); }
   };
