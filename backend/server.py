@@ -292,6 +292,18 @@ class NotificationIn(BaseModel):
     category: Optional[str] = "general"
 
 
+class ProfileUpdateIn(BaseModel):
+    name: Optional[str] = None
+    ccc_rank: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    profile_summary: Optional[str] = None
+    career_summary: Optional[str] = None
+    interested_in_choir: Optional[bool] = None
+    privacy: Optional[dict] = {}   # e.g. {"city": "members", "email": "private"}
+    directory_visible: Optional[bool] = True
+
+
 # ---------------- Auth Routes ----------------
 @api.post("/auth/register")
 async def register(req: RegisterReq, response: Response):
@@ -725,6 +737,59 @@ async def set_active_parish(body: dict, user: dict = Depends(get_current_user)):
     return {"ok": True, "active_parish_id": parish_id}
 
 
+@api.patch("/me/profile")
+async def update_my_profile(body: ProfileUpdateIn, user: dict = Depends(get_current_user)):
+    """Self-serve profile update. Respects field-level restrictions."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates.pop("id", None); updates.pop("email", None); updates.pop("role", None)
+    updates["profile_updated_at"] = iso(now_utc())
+    await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    return {"ok": True}
+
+
+@api.post("/me/photo")
+async def upload_profile_photo(request: Request, user: dict = Depends(get_current_user)):
+    """Upload profile photo. Accepts multipart OR JSON {image_b64, filename}."""
+    from fastapi import UploadFile
+    import base64 as _b64
+    r2_url = await get_config("cloudflare_r2_public_url")
+    content_type = request.headers.get("content-type", "")
+    avatar_url = ""
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        file: UploadFile = form.get("file")
+        if not file:
+            raise HTTPException(400, "No file provided")
+        data = await file.read()
+        key = f"avatars/{user['id']}/{new_id()}_{file.filename}"
+        try:
+            import boto3, botocore.config
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=await get_config("cloudflare_r2_endpoint") or os.environ.get("R2_ENDPOINT", ""),
+                aws_access_key_id=await get_config("cloudflare_r2_access_key") or os.environ.get("R2_ACCESS_KEY", ""),
+                aws_secret_access_key=await get_config("cloudflare_r2_secret") or os.environ.get("R2_SECRET_KEY", ""),
+                config=botocore.config.Config(signature_version="s3v4"),
+                region_name="auto",
+            )
+            bucket = await get_config("cloudflare_r2_bucket") or os.environ.get("R2_BUCKET", "")
+            s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=file.content_type or "image/jpeg")
+            avatar_url = f"{r2_url}/{key}" if r2_url else f"/static/{key}"
+        except Exception as e:
+            log.warning("R2 upload failed: %s", e)
+            b64 = _b64.b64encode(data).decode()
+            avatar_url = f"data:{file.content_type or 'image/jpeg'};base64,{b64}"
+    else:
+        body_json = await request.json()
+        b64_str = body_json.get("image_b64", "")
+        mime = body_json.get("mime", "image/jpeg")
+        if b64_str:
+            avatar_url = f"data:{mime};base64,{b64_str}"
+    if avatar_url:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"avatar": avatar_url, "profile_updated_at": iso(now_utc())}})
+    return {"ok": True, "avatar": avatar_url}
+
+
 @api.post("/memberships/request")
 async def request_membership(body: MembershipReqIn, user: dict = Depends(get_current_user)):
     active = await db.parish_memberships.count_documents({"user_id": user["id"], "status": "approved"})
@@ -1098,6 +1163,50 @@ async def list_testimonies(scope: str = "global", parish_id: Optional[str] = Non
     return items
 
 
+@api.post("/testimonies/{tid}/react")
+async def react_testimony(tid: str, body: dict, user: dict = Depends(get_current_user)):
+    reaction = body.get("reaction", "amen")
+    field = f"reactions.{reaction}"
+    already = await db.testimony_reactions.find_one({"testimony_id": tid, "user_id": user["id"], "reaction": reaction})
+    if already:
+        return {"ok": True, "already": True}
+    await db.testimonies.update_one({"id": tid}, {"$inc": {field: 1}})
+    await db.testimony_reactions.insert_one({"id": new_id(), "testimony_id": tid, "user_id": user["id"], "reaction": reaction, "created_at": iso(now_utc())})
+    return {"ok": True}
+
+
+@api.get("/testimonies/{tid}/comments")
+async def list_testimony_comments(tid: str, user: dict = Depends(get_current_user)):
+    return await db.testimony_comments.find({"testimony_id": tid}, {"_id": 0}).sort("created_at", 1).to_list(200)
+
+
+@api.post("/testimonies/{tid}/comments")
+async def add_testimony_comment(tid: str, body: CommentIn, user: dict = Depends(get_current_user)):
+    doc = {"id": new_id(), "testimony_id": tid, "user_id": user["id"], "user_name": user.get("name", ""), "user_avatar": user.get("avatar", ""), "body": body.body.strip(), "created_at": iso(now_utc())}
+    await db.testimony_comments.insert_one(doc)
+    await db.testimonies.update_one({"id": tid}, {"$inc": {"comment_count": 1}})
+    doc.pop("_id", None)
+    return doc
+
+
+@api.patch("/testimonies/{tid}")
+async def admin_testimony(tid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin", "moderator"))):
+    action = body.get("action")  # approve | reject | feature | unfeature
+    updates: dict = {"moderated_by": user["id"], "moderated_at": iso(now_utc())}
+    if action == "approve":
+        updates["status"] = "approved"
+    elif action == "reject":
+        updates["status"] = "rejected"
+    elif action == "feature":
+        updates["featured"] = True
+    elif action == "unfeature":
+        updates["featured"] = False
+    else:
+        raise HTTPException(400, f"Unknown action: {action}")
+    await db.testimonies.update_one({"id": tid}, {"$set": updates})
+    return {"ok": True}
+
+
 # ---------------- Events ----------------
 @api.post("/events")
 async def create_event(body: EventIn, user: dict = Depends(require_roles("super_admin", "parish_admin", "shepherd"))):
@@ -1428,6 +1537,74 @@ async def follow_member(uid: str, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+@api.delete("/members/{uid}/follow")
+async def unfollow_member(uid: str, user: dict = Depends(get_current_user)):
+    await db.member_follows.delete_one({"follower_id": user["id"], "followee_id": uid})
+    await db.users.update_one({"id": uid}, {"$inc": {"follow_count": -1}})
+    return {"ok": True}
+
+
+@api.get("/members/{uid}/follow-status")
+async def follow_status(uid: str, user: dict = Depends(get_current_user)):
+    following = await db.member_follows.find_one({"follower_id": user["id"], "followee_id": uid})
+    followers_count = await db.member_follows.count_documents({"followee_id": uid})
+    return {"following": bool(following), "followers_count": followers_count}
+
+
+@api.get("/members/{uid}")
+async def get_member_profile(uid: str, user: dict = Depends(get_current_user)):
+    """Return a member's public/members-visible profile fields."""
+    blocked = await db.member_blocks.find_one({"$or": [{"blocker_id": user["id"], "blocked_id": uid}, {"blocker_id": uid, "blocked_id": user["id"]}]})
+    if blocked:
+        raise HTTPException(403, "Profile not available")
+    m = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0, "email": 0})
+    if not m:
+        raise HTTPException(404, "Member not found")
+    priv = m.get("privacy") or {}
+    # Respect privacy field — strip private-only fields
+    def _vis(field: str) -> bool:
+        v = priv.get(field, "members")
+        if v == "public": return True
+        if v == "members": return True
+        if v == "private": return False
+        return True
+    for f in ["city", "career_summary", "phone_public"]:
+        if not _vis(f):
+            m.pop(f, None)
+    # Enrich with choir & service
+    choir = await db.choir_memberships.find_one({"user_id": uid, "status": "verified"}, {"_id": 0})
+    service_teams = await db.volunteer_memberships.find({"user_id": uid, "status": "approved"}, {"_id": 0}).to_list(20)
+    # Check follow
+    is_following = bool(await db.member_follows.find_one({"follower_id": user["id"], "followee_id": uid}))
+    followers_count = await db.member_follows.count_documents({"followee_id": uid})
+    return {**m, "choir": choir, "service_teams": service_teams, "is_following": is_following, "followers_count": followers_count}
+
+
+@api.post("/members/{uid}/block")
+async def block_member(uid: str, user: dict = Depends(get_current_user)):
+    if uid == user["id"]:
+        raise HTTPException(400, "Cannot block yourself")
+    existing = await db.member_blocks.find_one({"blocker_id": user["id"], "blocked_id": uid})
+    if existing:
+        return {"ok": True, "already": True}
+    await db.member_blocks.insert_one({"id": new_id(), "blocker_id": user["id"], "blocked_id": uid, "created_at": iso(now_utc())})
+    # Also remove follows in both directions
+    await db.member_follows.delete_many({"$or": [{"follower_id": user["id"], "followee_id": uid}, {"follower_id": uid, "followee_id": user["id"]}]})
+    return {"ok": True}
+
+
+@api.delete("/members/{uid}/block")
+async def unblock_member(uid: str, user: dict = Depends(get_current_user)):
+    await db.member_blocks.delete_one({"blocker_id": user["id"], "blocked_id": uid})
+    return {"ok": True}
+
+
+@api.get("/me/blocks")
+async def my_blocks(user: dict = Depends(get_current_user)):
+    blocks = await db.member_blocks.find({"blocker_id": user["id"]}, {"_id": 0}).to_list(200)
+    return blocks
+
+
 # ---------------- Messaging ----------------
 @api.post("/messages")
 async def send_message(body: MessageIn, user: dict = Depends(get_current_user)):
@@ -1453,15 +1630,23 @@ async def send_message(body: MessageIn, user: dict = Depends(get_current_user)):
 
 @api.get("/messages/inbox")
 async def inbox(user: dict = Depends(get_current_user)):
-    msgs = await db.direct_messages.find({"$or": [{"from_user_id": user["id"]}, {"to_user_id": user["id"]}]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    msgs = await db.direct_messages.find({"$or": [{"from_user_id": user["id"]}, {"to_user_id": user["id"]}]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     convs: dict = {}
     for m in msgs:
         cid = m["conversation_id"]
         if cid not in convs:
             other_id = m["to_user_id"] if m["from_user_id"] == user["id"] else m["from_user_id"]
-            convs[cid] = {"conversation_id": cid, "other_user_id": other_id, "last": m, "messages": []}
+            other = await db.users.find_one({"id": other_id}, {"_id": 0, "password_hash": 0, "email": 0, "id": 1, "name": 1, "avatar": 1, "ccc_rank": 1})
+            unread = await db.direct_messages.count_documents({"conversation_id": cid, "to_user_id": user["id"], "read": {"$ne": True}})
+            convs[cid] = {"conversation_id": cid, "other_user_id": other_id, "other_user": other or {}, "last": m, "unread": unread, "messages": []}
         convs[cid]["messages"].append(m)
     return list(convs.values())
+
+
+@api.patch("/messages/conversations/{cid}/read")
+async def mark_conversation_read(cid: str, user: dict = Depends(get_current_user)):
+    await db.direct_messages.update_many({"conversation_id": cid, "to_user_id": user["id"]}, {"$set": {"read": True}})
+    return {"ok": True}
 
 
 # ---------------- Careers ----------------
@@ -1506,6 +1691,51 @@ async def apply_job(jid: str, body: dict, user: dict = Depends(get_current_user)
     await db.careers_applications.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@api.post("/jobs/{jid}/save")
+async def save_job(jid: str, user: dict = Depends(get_current_user)):
+    existing = await db.saved_jobs.find_one({"job_id": jid, "user_id": user["id"]})
+    if existing:
+        return {"ok": True, "already": True}
+    await db.saved_jobs.insert_one({"id": new_id(), "job_id": jid, "user_id": user["id"], "created_at": iso(now_utc())})
+    return {"ok": True}
+
+
+@api.delete("/jobs/{jid}/save")
+async def unsave_job(jid: str, user: dict = Depends(get_current_user)):
+    await db.saved_jobs.delete_one({"job_id": jid, "user_id": user["id"]})
+    return {"ok": True}
+
+
+@api.get("/me/saved-jobs")
+async def my_saved_jobs(user: dict = Depends(get_current_user)):
+    saves = await db.saved_jobs.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    out = []
+    for s in saves:
+        job = await db.careers_jobs.find_one({"id": s["job_id"]}, {"_id": 0})
+        if job:
+            out.append({**job, "saved_at": s["created_at"]})
+    return out
+
+
+@api.get("/me/applications")
+async def my_applications(user: dict = Depends(get_current_user)):
+    apps = await db.careers_applications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    out = []
+    for a in apps:
+        job = await db.careers_jobs.find_one({"id": a["job_id"]}, {"_id": 0})
+        out.append({**a, "job": job})
+    return out
+
+
+@api.get("/me/service-teams")
+async def my_service_teams(user: dict = Depends(get_current_user)):
+    items = await db.volunteer_memberships.find({"user_id": user["id"]}, {"_id": 0}).to_list(50)
+    for it in items:
+        p = await db.parishes.find_one({"id": it.get("parish_id", "")}, {"_id": 0, "name": 1, "id": 1})
+        it["parish"] = p
+    return items
 
 
 # ---------------- Notifications ----------------

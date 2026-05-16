@@ -2,7 +2,7 @@ import React from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  Home, Church, Users, HandHelping, Calendar, Music, Briefcase,
+  Home, Church, Users, HandHelping, Calendar, Music, Music2, Briefcase,
   Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search, Globe, MessageCircle
 } from "lucide-react";
 
@@ -21,6 +21,7 @@ const NAV = [
   { to: "/app/careers", label: "Careers", icon: Briefcase, testid: "nav-careers" },
   { to: "/app/messages", label: "Messages", icon: MessageSquare, testid: "nav-messages" },
   { to: "/app/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
+  { to: "/app/music", label: "CPM Wave", icon: Music2, testid: "nav-music" },
 ];
 
 export default function AppLayout({ children }) {
@@ -106,8 +107,8 @@ export default function AppLayout({ children }) {
                 <div className="text-sm font-medium text-[var(--text-primary)]" data-testid="topbar-user-name">{user?.name}</div>
                 <div className="text-[11px] text-[var(--text-tertiary)]">{user?.ccc_rank || user?.role}</div>
               </div>
-              <Link to="/app/profile" data-testid="topbar-avatar" className="w-9 h-9 rounded-full bg-[var(--brand-secondary)] text-white grid place-items-center text-sm font-medium hover:ring-2 hover:ring-[var(--brand-accent)] transition">
-                {(user?.name || "U").slice(0, 1).toUpperCase()}
+              <Link to="/app/profile" data-testid="topbar-avatar" className="w-9 h-9 rounded-full overflow-hidden bg-[var(--brand-secondary)] text-white grid place-items-center text-sm font-medium hover:ring-2 hover:ring-[var(--brand-accent)] transition">
+                {user?.avatar ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" /> : (user?.name || "U").slice(0, 1).toUpperCase()}
               </Link>
             </div>
           </div>

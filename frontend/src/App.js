@@ -21,6 +21,7 @@ import Notifications from "./pages/Notifications";
 import Admin from "./pages/Admin";
 import Testimonies from "./pages/Testimonies";
 import Profile from "./pages/Profile";
+import Music from "./pages/Music";
 import GlobalFeed from "./pages/GlobalFeed";
 import ParishFeed from "./pages/ParishFeed";
 import { ForgotPassword, ResetPassword } from "./pages/PasswordReset";
@@ -105,6 +106,7 @@ function App() {
           <Route path="/app/testimonies" element={<Protected><AppLayout><Testimonies /></AppLayout></Protected>} />
           <Route path="/app/feed" element={<Protected><AppLayout><GlobalFeed /></AppLayout></Protected>} />
           <Route path="/app/profile" element={<Protected><AppLayout><Profile /></AppLayout></Protected>} />
+          <Route path="/app/music" element={<Protected><AppLayout><Music /></AppLayout></Protected>} />
           <Route path="/app/admin" element={<AdminGate><AppLayout><Admin /></AppLayout></AdminGate>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
