@@ -631,57 +631,187 @@ function ActiveContestsWidget() {
   );
 }
 
-// ── Live Parish Feed Preview ──────────────────────────────────────────────
-function LiveParishFeedPreview({ parishId }) {
+// ── Global Pulse Strip — Instagram-story-style worldwide CCC activity ────
+function GlobalPulseStrip() {
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    if (!parishId) return;
-    http.get("/posts", { params: { scope: "parish", parish_id: parishId } })
-      .then((r) => setPosts(r.data.slice(0, 5)))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [parishId]);
+    http.get("/posts", { params: { scope: "global" } })
+      .then((r) => setPosts(r.data.slice(0, 9)))
+      .catch(() => {});
+  }, []);
+  if (posts.length === 0) return null;
+
+  const GRADIENTS = [
+    "linear-gradient(160deg,#0F1E38,#1a3060)",
+    "linear-gradient(160deg,#1a2f1a,#0d3d1a)",
+    "linear-gradient(160deg,#2d1a38,#3d1060)",
+    "linear-gradient(160deg,#2d1f0a,#5a3800)",
+    "linear-gradient(160deg,#0a1f2d,#083d4f)",
+    "linear-gradient(160deg,#2d0a16,#5a0824)",
+  ];
+
   return (
-    <section data-testid="live-feed-preview">
+    <section data-testid="global-pulse-strip">
       <div className="flex items-center justify-between mb-3">
         <div className="inline-flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <h2 className="font-display text-xl text-[var(--brand-primary)]">Parish Feed</h2>
+          <Globe size={15} className="text-[var(--brand-accent)]" />
+          <h2 className="font-display text-xl text-[var(--brand-primary)]">CCC Worldwide</h2>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         </div>
-        <Link to="/app/parish-feed" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
-          Open feed <ArrowRight size={13} />
+        <Link to="/app/feed" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
+          Full feed <ArrowRight size={13} />
         </Link>
       </div>
+
+      {/* Story-style cards */}
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x snap-mandatory">
+        {posts.map((post, i) => (
+          <Link
+            key={post.id}
+            to="/app/feed"
+            className="shrink-0 snap-start w-32 h-44 rounded-2xl overflow-hidden relative group cursor-pointer"
+            style={{ background: GRADIENTS[i % GRADIENTS.length] }}
+          >
+            {/* Background media */}
+            {post.media_urls?.[0] && (
+              <img
+                src={post.media_urls[0]}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity"
+              />
+            )}
+            {/* Gold ring gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+            {/* Content */}
+            <div className="absolute inset-0 p-3 flex flex-col justify-between">
+              {/* Avatar ring — like Instagram story ring */}
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-white/15 border-2 border-[var(--brand-accent)] grid place-items-center text-white text-xs font-display shadow-lg shrink-0">
+                {post.user_avatar
+                  ? <img src={post.user_avatar} alt="" className="w-full h-full object-cover" />
+                  : (post.user_name || "?")[0]}
+              </div>
+              {/* Bottom info */}
+              <div>
+                <div className="text-white text-[11px] font-semibold leading-tight truncate">{post.user_name}</div>
+                {post.parish_name && (
+                  <div className="text-white/55 text-[9px] leading-tight truncate mt-0.5">{post.parish_name}</div>
+                )}
+                <div className="text-white/80 text-[10px] leading-snug mt-1 line-clamp-3">{post.body}</div>
+                {post.media_urls?.length > 0 && !post.body && (
+                  <div className="text-white/60 text-[9px] mt-1">📸 Photo shared</div>
+                )}
+              </div>
+            </div>
+          </Link>
+        ))}
+
+        {/* "See more" card */}
+        <Link
+          to="/app/feed"
+          className="shrink-0 snap-start w-32 h-44 rounded-2xl border-2 border-dashed border-[var(--border-default)] flex flex-col items-center justify-center gap-2 text-[var(--text-secondary)] hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)] transition-all group"
+        >
+          <div className="w-10 h-10 rounded-full bg-[var(--bg-subtle)] grid place-items-center group-hover:bg-[var(--brand-accent)]/10 transition-colors">
+            <Globe size={18} className="text-[var(--brand-accent)]" />
+          </div>
+          <span className="text-[10px] text-center font-semibold px-2 leading-tight">See all worldwide</span>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+// ── Unified Feed Preview — tabbed Parish ↔ Worldwide ──────────────────────
+function UnifiedFeedPreview({ parishId }) {
+  const [activeTab, setActiveTab] = useState("parish");
+  const [parishPosts, setParishPosts] = useState([]);
+  const [globalPosts, setGlobalPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const reqs = [
+      http.get("/posts", { params: { scope: "global" } }).then((r) => setGlobalPosts(r.data.slice(0, 6))).catch(() => {}),
+    ];
+    if (parishId) {
+      reqs.push(
+        http.get("/posts", { params: { scope: "parish", parish_id: parishId } }).then((r) => setParishPosts(r.data.slice(0, 6))).catch(() => {})
+      );
+    }
+    Promise.all(reqs).finally(() => setLoading(false));
+  }, [parishId]);
+
+  const posts = activeTab === "parish" ? parishPosts : globalPosts;
+  const linkTo = activeTab === "parish" ? "/app/parish-feed" : "/app/feed";
+  const emptyMsg = activeTab === "parish" ? "Your parish feed is quiet — post something!" : "No global posts yet — be the first!";
+  const ctaLabel = activeTab === "parish" ? "Open Parish Feed" : "Open Global Feed";
+  const FooterIcon = activeTab === "parish" ? MessageCircle : Globe;
+
+  return (
+    <section data-testid="unified-feed-preview">
+      {/* Tab header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1 bg-[var(--bg-subtle)] rounded-xl p-1">
+          {[
+            { k: "parish",  label: "My Parish",  Icon: MessageCircle },
+            { k: "global",  label: "Worldwide",   Icon: Globe },
+          ].map(({ k, label, Icon }) => (
+            <button
+              key={k}
+              onClick={() => setActiveTab(k)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === k
+                  ? "bg-[var(--bg-paper)] text-[var(--brand-primary)] shadow-sm"
+                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
+        <Link to={linkTo} className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
+          See all <ArrowRight size={13} />
+        </Link>
+      </div>
+
+      {/* Live indicator */}
+      <div className="flex items-center gap-1.5 mb-3">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
+          {activeTab === "parish" ? "Live from your parish" : "Live from CCC worldwide"}
+        </span>
+      </div>
+
       {loading ? (
-        <div className="space-y-3 animate-pulse">
+        <div className="space-y-2 animate-pulse">
           {[1, 2, 3].map((n) => <div key={n} className="card-surface h-[72px]" />)}
         </div>
       ) : posts.length === 0 ? (
         <div className="card-surface p-6 text-center space-y-2">
-          <MessageCircle size={20} className="mx-auto text-[var(--text-tertiary)] opacity-40" />
-          <p className="text-sm text-[var(--text-secondary)]">The feed is quiet — be the first to post!</p>
-          <Link to="/app/parish-feed" className="text-xs text-[var(--brand-accent)] font-semibold hover:underline">
-            Open Parish Feed →
-          </Link>
+          <FooterIcon size={20} className="mx-auto text-[var(--text-tertiary)] opacity-40" />
+          <p className="text-sm text-[var(--text-secondary)]">{emptyMsg}</p>
+          <Link to={linkTo} className="text-xs text-[var(--brand-accent)] font-semibold hover:underline">{ctaLabel} →</Link>
         </div>
       ) : (
         <div className="space-y-2">
           {posts.map((post) => (
             <Link
               key={post.id}
-              to="/app/parish-feed"
+              to={linkTo}
               className="card-surface p-4 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors"
             >
               <div className="w-9 h-9 rounded-full overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-sm font-display shrink-0">
                 {post.user_avatar
                   ? <img src={post.user_avatar} alt="" className="w-full h-full object-cover" />
-                  : (post.user_name || "?")?.[0]}
+                  : (post.user_name || "?")[0]}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-[var(--brand-primary)] truncate">{post.user_name}</span>
-                  <span className="text-xs text-[var(--text-tertiary)] shrink-0">
+                  {activeTab === "global" && post.parish_name && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-tertiary)] border border-[var(--border-default)] truncate max-w-[130px]">
+                      📍 {post.parish_name}
+                    </span>
+                  )}
+                  <span className="text-xs text-[var(--text-tertiary)] shrink-0 ml-auto">
                     {new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                   </span>
                 </div>
@@ -690,7 +820,7 @@ function LiveParishFeedPreview({ parishId }) {
                 )}
                 {post.media_urls?.length > 0 && (
                   <span className="text-xs text-[var(--text-tertiary)] mt-0.5 inline-block">
-                    📎 {post.media_urls.length} attachment{post.media_urls.length > 1 ? "s" : ""}
+                    📎 {post.media_urls.length} file{post.media_urls.length > 1 ? "s" : ""}
                   </span>
                 )}
               </div>
@@ -698,10 +828,10 @@ function LiveParishFeedPreview({ parishId }) {
             </Link>
           ))}
           <Link
-            to="/app/parish-feed"
+            to={linkTo}
             className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-[var(--border-default)] text-sm text-[var(--brand-accent)] font-semibold hover:border-[var(--brand-accent)] hover:bg-[var(--brand-accent)]/5 transition-colors"
           >
-            <MessageCircle size={14} /> See all parish posts
+            <FooterIcon size={14} /> {ctaLabel}
           </Link>
         </div>
       )}
@@ -930,10 +1060,13 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
       {/* ③ Quick Amen — intercede for brethren without leaving home */}
       <QuickAmenStrip />
 
-      {/* ④ Live Parish Feed — what's happening right now */}
-      <LiveParishFeedPreview parishId={active?.parish_id} />
+      {/* ④ CCC Worldwide — story-style global pulse */}
+      <GlobalPulseStrip />
 
-      {/* Active Contests */}
+      {/* ⑤ Unified Feed — tabbed Parish ↔ Worldwide */}
+      <UnifiedFeedPreview parishId={active?.parish_id} />
+
+      {/* ⑥ Active Contests */}
       <ActiveContestsWidget />
 
       {/* Engagement rail */}
