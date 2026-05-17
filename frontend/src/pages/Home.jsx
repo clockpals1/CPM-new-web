@@ -248,29 +248,29 @@ function QuickAmenStrip() {
           return (
             <div
               key={p.id}
-              className={`card-surface p-3.5 flex items-center gap-3 transition-all ${done ? "border-rose-100" : ""}`}
+              className={`card-surface p-4 flex items-center gap-3 transition-all ${done ? "border-rose-100" : ""}`}
             >
-              <div className="w-8 h-8 rounded-full overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-xs font-display shrink-0">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-sm font-display shrink-0">
                 {p.user_avatar
                   ? <img src={p.user_avatar} alt="" className="w-full h-full object-cover" />
                   : (p.user_name || "?")[0]}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-[var(--brand-primary)] line-clamp-1">{p.title}</div>
+                <div className="text-[15px] font-semibold text-[var(--brand-primary)] line-clamp-1 leading-snug">{p.title}</div>
                 <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{p.user_name} · {p.prayed_count || 0} praying</div>
               </div>
               <button
                 onClick={() => sendAmen(p)}
                 disabled={done}
-                className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 ${
+                className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-bold min-h-[44px] transition-all active:scale-95 ${
                   showing
-                    ? "bg-rose-500 text-white scale-110"
+                    ? "bg-rose-500 text-white scale-105"
                     : done
                       ? "bg-rose-50 text-rose-500 border border-rose-200"
-                      : "border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-400"
+                      : "border-2 border-rose-300 text-rose-600 active:bg-rose-50"
                 }`}
               >
-                <Heart size={11} className={done ? "fill-current" : ""} />
+                <Heart size={13} className={done ? "fill-current" : ""} />
                 {showing ? "Amen! 🙏" : done ? "Praying" : "Amen"}
               </button>
             </div>
@@ -558,14 +558,14 @@ function CpmStarsWidget() {
                   : <span className="text-3xl font-display text-white">{(s.member_name || "?")[0]}</span>}
               </div>
               <div>
-                <div className="text-[9px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">
+                <div className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">
                   {s.period === "week" ? "⭐ Star of the Week" : "🌟 Star of the Month"}
                 </div>
                 <div className="text-sm font-semibold text-white leading-tight">{s.member_name}</div>
-                <div className="text-[11px] text-white/70 mt-0.5 leading-tight line-clamp-2">{s.award}</div>
+                <div className="text-xs text-white/70 mt-0.5 leading-tight line-clamp-2">{s.award}</div>
               </div>
               {s.description && (
-                <div className="text-[10px] text-white/50 leading-tight line-clamp-2">{s.description}</div>
+                <div className="text-xs text-white/50 leading-tight line-clamp-2">{s.description}</div>
               )}
             </div>
           </div>
@@ -676,14 +676,14 @@ function GlobalPulseStrip() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-[var(--brand-primary)] truncate leading-tight">{post.user_name}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{timeAgo(post.created_at)} ago</div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{timeAgo(post.created_at)} ago</div>
               </div>
             </div>
 
             {/* Parish location badge */}
             {post.parish_name && (
-              <div className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-full bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/20 text-[10px] text-[var(--brand-accent)] font-semibold">
-                <MapPin size={9} />{post.parish_name}
+              <div className="inline-flex items-center gap-1 w-fit px-2 py-1 rounded-full bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/20 text-xs text-[var(--brand-accent)] font-semibold">
+                <MapPin size={10} />{post.parish_name}
               </div>
             )}
 
@@ -768,13 +768,13 @@ function UnifiedFeedPreview({ parishId }) {
             <button
               key={k}
               onClick={() => setActiveTab(k)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all min-h-[44px] ${
                 activeTab === k
                   ? "bg-[var(--bg-paper)] text-[var(--brand-primary)] shadow-sm"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                  : "text-[var(--text-tertiary)]"
               }`}
             >
-              <Icon size={12} /> {label}
+              <Icon size={14} /> {label}
             </button>
           ))}
         </div>
