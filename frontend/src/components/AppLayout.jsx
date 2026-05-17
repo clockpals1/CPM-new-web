@@ -360,7 +360,7 @@ export default function AppLayout({ children }) {
           onLogout={handleLogout}
         />
 
-        <main className="flex-1 px-4 md:px-8 py-5 md:py-8 pb-28 md:pb-8 overflow-y-auto fade-in">
+        <main className="flex-1 px-4 md:px-8 py-5 md:py-8 pb-28 md:pb-8 overflow-x-hidden overflow-y-auto fade-in">
           {children}
         </main>
       </div>

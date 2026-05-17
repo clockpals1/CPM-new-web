@@ -144,7 +144,7 @@ function DailyMomentCard({ user, parish }) {
           <div className="shrink-0 flex flex-col items-center bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 rounded-2xl px-4 py-3 min-w-[60px]">
             <Flame size={18} className="text-[var(--brand-accent)]" />
             <span className="text-[var(--brand-accent)] font-display text-2xl leading-none mt-0.5">{streak}</span>
-            <span className="text-[10px] text-white/50 uppercase tracking-wide mt-0.5">day{streak !== 1 ? "s" : ""}</span>
+            <span className="text-[11px] text-white/50 uppercase tracking-wide mt-0.5">day{streak !== 1 ? "s" : ""}</span>
           </div>
         </div>
 
@@ -190,7 +190,7 @@ function DailyMomentCard({ user, parish }) {
                 className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-white/10 active:bg-white/25 text-white transition-colors"
               >
                 <Icon size={16} />
-                <span className="text-[10px] font-medium opacity-80">{label}</span>
+                <span className="text-[11px] font-medium opacity-80">{label}</span>
               </Link>
             ))}
           </div>
@@ -723,7 +723,7 @@ function GlobalPulseStrip() {
           </div>
           <div className="text-center px-3">
             <div className="text-xs font-bold text-[var(--brand-primary)]">See all</div>
-            <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">worldwide posts</div>
+            <div className="text-xs text-[var(--text-tertiary)] mt-0.5">worldwide posts</div>
           </div>
         </Link>
       </div>
@@ -786,7 +786,7 @@ function UnifiedFeedPreview({ parishId }) {
       {/* Live indicator */}
       <div className="flex items-center gap-1.5 mb-3">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
+        <span className="text-[11px] text-[var(--text-tertiary)] uppercase tracking-wider">
           {activeTab === "parish" ? "Live from your parish" : "Live from CCC worldwide"}
         </span>
       </div>
@@ -818,7 +818,7 @@ function UnifiedFeedPreview({ parishId }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-[var(--brand-primary)] truncate">{post.user_name}</span>
                   {activeTab === "global" && post.parish_name && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-tertiary)] border border-[var(--border-default)] truncate max-w-[130px]">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-tertiary)] border border-[var(--border-default)] truncate max-w-[130px]">
                       📍 {post.parish_name}
                     </span>
                   )}
@@ -1006,7 +1006,7 @@ function EngagementRail() {
               <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-white/80 text-[10px] uppercase tracking-widest font-semibold">Live Now</div>
+              <div className="text-white/80 text-xs uppercase tracking-widest font-semibold">Live Now</div>
               <div className="text-white text-sm font-medium truncate mt-0.5">{live_now[0].title}</div>
               <Link to="/app/events" className="mt-2 inline-flex items-center gap-1 text-white/80 text-xs hover:text-white">
                 <Play size={10} /> Watch <ChevronRight size={10} />
@@ -1023,7 +1023,7 @@ function EngagementRail() {
               <CalendarClock size={17} className="text-[var(--brand-accent)]" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-widest font-semibold text-[var(--brand-accent)]">Next Rehearsal</div>
+              <div className="text-xs uppercase tracking-widest font-semibold text-[var(--brand-accent)]">Next Rehearsal</div>
               <div className="text-sm font-medium text-[var(--brand-primary)] truncate mt-0.5">{next_rehearsal.title}</div>
               <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
                 {new Date(next_rehearsal.scheduled_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -1040,7 +1040,7 @@ function EngagementRail() {
               <Calendar size={17} className="text-emerald-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-widest font-semibold text-emerald-700">Up Next</div>
+              <div className="text-xs uppercase tracking-widest font-semibold text-emerald-700">Up Next</div>
               <div className="text-sm font-medium text-[var(--brand-primary)] truncate mt-0.5">{nextEvent.title}</div>
               <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
                 {new Date(nextEvent.starts_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -1060,7 +1060,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
   const p = active?.parish || {};
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6" data-testid="home-parish-dashboard">
+    <div className="max-w-2xl mx-auto space-y-5 overflow-x-hidden" data-testid="home-parish-dashboard">
 
       {/* ① Daily Moment — fresh every single day */}
       <DailyMomentCard user={user} parish={p} />
@@ -1104,7 +1104,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
                 <div className="font-medium text-[var(--brand-primary)] line-clamp-1">{m.parish?.name || "Parish"}</div>
                 <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{m.parish?.city}</div>
                 {i === 0 && (
-                  <div className="text-[10px] text-[var(--brand-accent)] mt-1.5 font-semibold uppercase tracking-wider">Active</div>
+                  <div className="text-xs text-[var(--brand-accent)] mt-1.5 font-semibold uppercase tracking-wider">Active</div>
                 )}
               </Link>
             ))}
