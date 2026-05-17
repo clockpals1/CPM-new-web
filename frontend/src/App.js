@@ -26,6 +26,7 @@ import GlobalFeed from "./pages/GlobalFeed";
 import ParishFeed from "./pages/ParishFeed";
 import ParishAdminRequest from "./pages/ParishAdminRequest";
 import { ForgotPassword, ResetPassword } from "./pages/PasswordReset";
+import Contests from "./pages/Contests";
 import { ensureServiceWorker } from "./lib/push";
 
 function Loader() {
@@ -111,6 +112,7 @@ function App() {
           <Route path="/app/profile" element={<Protected><AppLayout><Profile /></AppLayout></Protected>} />
           <Route path="/app/parish-admin-request" element={<Protected><AppLayout><ParishAdminRequest /></AppLayout></Protected>} />
           <Route path="/app/music" element={<Protected><AppLayout><Music /></AppLayout></Protected>} />
+          <Route path="/app/contests" element={<Protected><AppLayout><Contests /></AppLayout></Protected>} />
           <Route path="/app/admin" element={<AdminGate><AppLayout><Admin /></AppLayout></AdminGate>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

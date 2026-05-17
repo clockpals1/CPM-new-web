@@ -5,7 +5,7 @@ import ChatBot from "./ChatBot";
 import {
   Home, Church, Users, HandHelping, Calendar, Music, Music2, Briefcase,
   Heart, MessageSquare, Bell, Shield, LogOut, Sparkles, Search, Globe,
-  MessageCircle, Menu, X, ChevronRight, User, UserCog,
+  MessageCircle, Menu, X, ChevronRight, User, UserCog, Trophy,
 } from "lucide-react";
 
 const NAV = [
@@ -24,6 +24,7 @@ const NAV = [
   { to: "/app/messages",    label: "Messages",      icon: MessageSquare,          testid: "nav-messages" },
   { to: "/app/notifications",label: "Notifications",icon: Bell,                   testid: "nav-notifications" },
   { to: "/app/music",       label: "CPM Wave",      icon: Music2,                 testid: "nav-music" },
+  { to: "/app/contests",    label: "Contests",      icon: Trophy,                 testid: "nav-contests" },
 ];
 
 const BOTTOM_PRIMARY = [
@@ -41,6 +42,7 @@ const MORE_SECTIONS = [
       { to: "/app/parish-feed",  label: "Parish Feed",  icon: MessageCircle },
       { to: "/app/prayer",       label: "Prayer Wall",  icon: Heart },
       { to: "/app/testimonies",  label: "Testimonies",  icon: Sparkles },
+      { to: "/app/contests",      label: "Contests",     icon: Trophy },
     ],
   },
   {

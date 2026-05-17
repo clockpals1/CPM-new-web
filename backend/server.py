@@ -215,6 +215,32 @@ class TestimonyIn(BaseModel):
     parish_id: Optional[str] = None
 
 
+class ContestIn(BaseModel):
+    title: str
+    description: str
+    type: str = "photo"          # photo | video | verse | testimony
+    prize: str = ""
+    start_at: str
+    end_at: str
+    parish_id: Optional[str] = None  # None = platform-wide
+
+
+class ContestEntryIn(BaseModel):
+    body: str = ""
+    media_urls: Optional[List[str]] = []
+
+
+class CpmStarIn(BaseModel):
+    member_name: str
+    member_id: Optional[str] = None
+    photo_url: str = ""
+    award: str
+    description: str = ""
+    period: str = "week"   # week | month
+    period_label: str      # e.g. "Week of 12 May 2026"
+    expires_at: Optional[str] = None
+
+
 class EventIn(BaseModel):
     title: str
     description: Optional[str] = ""
@@ -1086,6 +1112,141 @@ async def share_post_global(pid: str, user: dict = Depends(get_current_user)):
     return doc
 
 
+# ─────────────────── Contests ───────────────────────────────────────────────
+
+@api.post("/contests")
+async def create_contest(body: ContestIn, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "created_by": user["id"], "created_at": iso(now_utc()), "status": "active", "winner_entry_id": None})
+    await db.contests.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/contests")
+async def list_contests(status: Optional[str] = None, user: dict = Depends(get_current_user)):
+    flt: dict = {}
+    if status:
+        flt["status"] = status
+    items = await db.contests.find(flt, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return items
+
+
+@api.get("/contests/{cid}")
+async def get_contest(cid: str, user: dict = Depends(get_current_user)):
+    c = await db.contests.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Contest not found")
+    return c
+
+
+@api.patch("/contests/{cid}")
+async def update_contest(cid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    body.pop("id", None); body.pop("_id", None)
+    await db.contests.update_one({"id": cid}, {"$set": body})
+    return {"ok": True}
+
+
+@api.delete("/contests/{cid}")
+async def delete_contest(cid: str, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    await db.contests.delete_one({"id": cid})
+    await db.contest_entries.delete_many({"contest_id": cid})
+    return {"ok": True}
+
+
+@api.post("/contests/{cid}/entries")
+async def submit_contest_entry(cid: str, body: ContestEntryIn, user: dict = Depends(get_current_user)):
+    c = await db.contests.find_one({"id": cid})
+    if not c:
+        raise HTTPException(404, "Contest not found")
+    if c.get("status") != "active":
+        raise HTTPException(400, "This contest is not open for submissions")
+    existing = await db.contest_entries.find_one({"contest_id": cid, "user_id": user["id"]})
+    if existing:
+        raise HTTPException(400, "You have already submitted an entry for this contest")
+    doc = {
+        "id": new_id(),
+        "contest_id": cid,
+        "user_id": user["id"],
+        "user_name": user.get("name", ""),
+        "user_avatar": user.get("avatar", ""),
+        "body": body.body,
+        "media_urls": body.media_urls or [],
+        "votes": 0,
+        "voted_by": [],
+        "created_at": iso(now_utc()),
+    }
+    await db.contest_entries.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/contests/{cid}/entries")
+async def get_contest_entries(cid: str, user: dict = Depends(get_current_user)):
+    entries = await db.contest_entries.find({"contest_id": cid}, {"_id": 0}).sort("votes", -1).to_list(200)
+    uid = user["id"]
+    for e in entries:
+        e["has_voted"] = uid in e.get("voted_by", [])
+        e.pop("voted_by", None)
+    return entries
+
+
+@api.post("/contests/{cid}/entries/{eid}/vote")
+async def vote_contest_entry(cid: str, eid: str, user: dict = Depends(get_current_user)):
+    entry = await db.contest_entries.find_one({"id": eid, "contest_id": cid})
+    if not entry:
+        raise HTTPException(404, "Entry not found")
+    uid = user["id"]
+    if uid in entry.get("voted_by", []):
+        await db.contest_entries.update_one({"id": eid}, {"$pull": {"voted_by": uid}, "$inc": {"votes": -1}})
+        return {"ok": True, "voted": False}
+    await db.contest_entries.update_one({"id": eid}, {"$addToSet": {"voted_by": uid}, "$inc": {"votes": 1}})
+    return {"ok": True, "voted": True}
+
+
+@api.post("/contests/{cid}/winner/{eid}")
+async def declare_contest_winner(cid: str, eid: str, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    entry = await db.contest_entries.find_one({"id": eid, "contest_id": cid})
+    if not entry:
+        raise HTTPException(404, "Entry not found")
+    await db.contests.update_one({"id": cid}, {"$set": {"winner_entry_id": eid, "status": "ended"}})
+    return {"ok": True}
+
+
+# ─────────────────── CPM Stars ──────────────────────────────────────────────
+
+@api.post("/cpm-stars")
+async def create_cpm_star(body: CpmStarIn, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "created_by": user["id"], "created_at": iso(now_utc()), "active": True})
+    await db.cpm_stars.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/cpm-stars")
+async def list_cpm_stars(active_only: bool = True, user: dict = Depends(get_current_user)):
+    flt: dict = {}
+    if active_only:
+        flt["active"] = True
+    stars = await db.cpm_stars.find(flt, {"_id": 0}).sort("created_at", -1).to_list(20)
+    return stars
+
+
+@api.patch("/cpm-stars/{sid}")
+async def update_cpm_star(sid: str, body: dict, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    allowed = {k: v for k, v in body.items() if k in ("active", "award", "description", "photo_url", "period_label", "expires_at", "member_name")}
+    await db.cpm_stars.update_one({"id": sid}, {"$set": allowed})
+    return {"ok": True}
+
+
+@api.delete("/cpm-stars/{sid}")
+async def delete_cpm_star(sid: str, user: dict = Depends(require_roles("super_admin", "parish_admin"))):
+    await db.cpm_stars.delete_one({"id": sid})
+    return {"ok": True}
+
+
+# ─────────────────── Post reactions (original) ───────────────────────────────
 @api.post("/posts/{pid}/react")
 async def react_post(pid: str, body: dict, user: dict = Depends(get_current_user)):
     reaction = body.get("reaction", "amen")

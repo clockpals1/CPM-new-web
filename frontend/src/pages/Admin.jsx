@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { http, formatErr } from "../lib/api";
-import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw, ExternalLink, Star, CheckCircle2, XCircle, Clock, Info, ChevronDown, UserCog } from "lucide-react";
+import { Loader2, Trash2, Plus, BadgeCheck, Shield, FileWarning, History, Zap, ShieldCheck, MapPin, Heart, CheckCircle, AlertCircle, Music, CalendarClock, Megaphone, Users, Upload, Download, Bot, FileText, Sparkles, PlayCircle, BookOpen, RefreshCw, ExternalLink, Star, CheckCircle2, XCircle, Clock, Info, ChevronDown, UserCog, Trophy, Crown, Image, Video, Send } from "lucide-react";
 import { toast } from "sonner";
 import VerifiedBadge from "../components/VerifiedBadge";
 
@@ -1691,6 +1691,282 @@ function CPMWaveManager() {
   );
 }
 
+// ── ContestsManager ────────────────────────────────────────────────────────
+const TYPE_OPTS = [
+  { v: "photo",     l: "📸 Photo Contest" },
+  { v: "video",     l: "🎬 Video Contest" },
+  { v: "verse",     l: "📖 Memory Verse" },
+  { v: "testimony", l: "✨ Testimony" },
+];
+const BLANK_CONTEST = { title: "", description: "", type: "photo", prize: "", start_at: "", end_at: "" };
+
+function ContestsManager() {
+  const [contests, setContests] = useState([]);
+  const [form, setForm] = useState(BLANK_CONTEST);
+  const [creating, setCreating] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [entries, setEntries] = useState({});
+
+  const load = () => http.get("/contests").then((r) => setContests(r.data)).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const create = async () => {
+    if (!form.title || !form.start_at || !form.end_at) return toast.error("Title, start and end dates are required.");
+    setCreating(true);
+    try { await http.post("/contests", form); toast.success("Contest created!"); setForm(BLANK_CONTEST); load(); }
+    catch (e) { toast.error(formatErr(e)); } finally { setCreating(false); }
+  };
+
+  const remove = async (cid, title) => {
+    if (!window.confirm(`Delete "${title}"?`)) return;
+    try { await http.delete(`/contests/${cid}`); toast.success("Deleted"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const toggleStatus = async (c) => {
+    const next = c.status === "active" ? "closed" : "active";
+    try { await http.patch(`/contests/${c.id}`, { status: next }); toast.success(`Contest ${next}`); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const loadEntries = async (cid) => {
+    if (entries[cid]) { setExpanded(expanded === cid ? null : cid); return; }
+    try {
+      const { data } = await http.get(`/contests/${cid}/entries`);
+      setEntries((p) => ({ ...p, [cid]: data }));
+      setExpanded(cid);
+    } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const declareWinner = async (cid, eid, entryUserName) => {
+    if (!window.confirm(`Declare ${entryUserName} as winner?`)) return;
+    try { await http.post(`/contests/${cid}/winner/${eid}`); toast.success("Winner declared!"); load(); setEntries((p) => ({ ...p, [cid]: undefined })); setExpanded(null); }
+    catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const STATUS_COLOR = { active: "bg-emerald-50 text-emerald-700 border-emerald-200", ended: "bg-gray-100 text-gray-500 border-gray-200", closed: "bg-amber-50 text-amber-700 border-amber-200" };
+
+  return (
+    <div className="space-y-6">
+      {/* Create form */}
+      <div className="card-surface p-5">
+        <h3 className="font-display text-xl text-[var(--brand-primary)] mb-4 flex items-center gap-2"><Trophy size={16} /> Create Contest</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Contest Title *</label>
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-clean w-full text-sm" placeholder="e.g. Juvenile Harvest Photo Contest 2026" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Description *</label>
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="input-clean w-full text-sm resize-none" placeholder="Describe what members should submit and how voting works…" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Type</label>
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="input-clean w-full text-sm">
+              {TYPE_OPTS.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Prize / Award</label>
+            <input value={form.prize} onChange={(e) => setForm({ ...form, prize: e.target.value })} className="input-clean w-full text-sm" placeholder="e.g. Gift card, Featured as CPM Star" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Start Date *</label>
+            <input type="datetime-local" value={form.start_at} onChange={(e) => setForm({ ...form, start_at: e.target.value })} className="input-clean w-full text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">End Date *</label>
+            <input type="datetime-local" value={form.end_at} onChange={(e) => setForm({ ...form, end_at: e.target.value })} className="input-clean w-full text-sm" />
+          </div>
+        </div>
+        <div className="flex justify-end mt-4">
+          <button onClick={create} disabled={creating} className="btn-primary inline-flex items-center gap-2">
+            {creating && <Loader2 size={14} className="animate-spin" />} Create Contest
+          </button>
+        </div>
+      </div>
+
+      {/* Contest list */}
+      <div className="space-y-3">
+        {contests.length === 0 && <div className="card-surface p-6 text-sm text-[var(--text-secondary)] text-center">No contests created yet.</div>}
+        {contests.map((c) => (
+          <div key={c.id} className="card-surface overflow-hidden">
+            <div className="p-4 flex flex-wrap items-start gap-3">
+              <div className="flex-1 min-w-[200px]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-[var(--brand-primary)]">{c.title}</span>
+                  <span className={`text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border font-semibold ${STATUS_COLOR[c.status] || STATUS_COLOR.ended}`}>{c.status}</span>
+                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase">{TYPE_OPTS.find((t) => t.v === c.type)?.l}</span>
+                </div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{c.prize && `🏆 ${c.prize} · `}Ends {new Date(c.end_at).toLocaleDateString()}</div>
+                {c.winner_entry_id && <div className="text-xs text-emerald-600 mt-0.5 font-semibold">✓ Winner declared</div>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => loadEntries(c.id)} className="text-xs px-3 py-1.5 rounded-md border border-[var(--border-default)] hover:border-[var(--brand-primary)] inline-flex items-center gap-1">
+                  <Users size={12} /> Entries {expanded === c.id ? "▲" : "▼"}
+                </button>
+                {c.status === "active" && (
+                  <button onClick={() => toggleStatus(c)} className="text-xs px-3 py-1.5 rounded-md border border-amber-300 text-amber-700 hover:bg-amber-50">Close</button>
+                )}
+                <button onClick={() => remove(c.id, c.title)} className="text-xs px-3 py-1.5 rounded-md border border-red-200 text-red-700 hover:bg-red-50"><Trash2 size={12} /></button>
+              </div>
+            </div>
+            {expanded === c.id && entries[c.id] && (
+              <div className="border-t border-[var(--border-default)] bg-[var(--bg-subtle)] p-4">
+                {entries[c.id].length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">No entries yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {entries[c.id].map((e, i) => (
+                      <div key={e.id} className={`flex items-start gap-3 p-3 rounded-xl bg-[var(--bg-paper)] border ${e.id === c.winner_entry_id ? "border-[var(--brand-accent)]" : "border-[var(--border-default)]"}`}>
+                        <span className="font-display text-xl text-[var(--border-default)] shrink-0 w-6">#{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-[var(--brand-primary)]">{e.user_name}</span>
+                            <span className="text-xs text-[var(--brand-accent)] font-semibold">{e.votes} votes</span>
+                            {e.id === c.winner_entry_id && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--brand-accent)] text-white font-bold">WINNER</span>}
+                          </div>
+                          {e.body && <p className="text-xs text-[var(--text-secondary)] mt-0.5 line-clamp-2">{e.body}</p>}
+                          {e.media_urls?.length > 0 && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{e.media_urls.length} media file(s)</div>}
+                        </div>
+                        {c.status === "active" && !c.winner_entry_id && (
+                          <button onClick={() => declareWinner(c.id, e.id, e.user_name)} className="text-xs px-3 py-1.5 rounded-md border border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold shrink-0">
+                            <Trophy size={12} className="inline mr-1" />Winner
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── CpmStarsManager ─────────────────────────────────────────────────────────
+const BLANK_STAR = { member_name: "", member_id: "", photo_url: "", award: "", description: "", period: "week", period_label: "", expires_at: "" };
+
+function CpmStarsManager() {
+  const [stars, setStars] = useState([]);
+  const [allStars, setAllStars] = useState([]);
+  const [form, setForm] = useState(BLANK_STAR);
+  const [creating, setCreating] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const load = () => http.get("/cpm-stars", { params: { active_only: false } }).then((r) => { setAllStars(r.data); setStars(r.data.filter((s) => s.active)); }).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const create = async () => {
+    if (!form.member_name || !form.award || !form.period_label) return toast.error("Member name, award, and period label are required.");
+    setCreating(true);
+    try { await http.post("/cpm-stars", form); toast.success("CPM Star created!"); setForm(BLANK_STAR); load(); }
+    catch (e) { toast.error(formatErr(e)); } finally { setCreating(false); }
+  };
+
+  const toggle = async (s) => {
+    try { await http.patch(`/cpm-stars/${s.id}`, { active: !s.active }); toast.success(s.active ? "Star deactivated" : "Star activated"); load(); }
+    catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const remove = async (sid, name) => {
+    if (!window.confirm(`Remove "${name}" from CPM Stars?`)) return;
+    try { await http.delete(`/cpm-stars/${sid}`); toast.success("Removed"); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
+  const displayed = showAll ? allStars : stars;
+
+  return (
+    <div className="space-y-6">
+      {/* Info */}
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-[var(--brand-accent)]/8 border border-[var(--brand-accent)]/30">
+        <Crown size={16} className="text-[var(--brand-accent)] shrink-0 mt-0.5" />
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          <span className="font-semibold text-[var(--brand-primary)]">CPM Stars</span> are featured members displayed prominently on the home page and global feed. Use them to celebrate contest winners, faithful members, and community champions.
+        </div>
+      </div>
+
+      {/* Create form */}
+      <div className="card-surface p-5">
+        <h3 className="font-display text-xl text-[var(--brand-primary)] mb-4 flex items-center gap-2"><Star size={16} /> Feature a CPM Star</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Member Name *</label>
+            <input value={form.member_name} onChange={(e) => setForm({ ...form, member_name: e.target.value })} className="input-clean w-full text-sm" placeholder="Full name" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Award Title *</label>
+            <input value={form.award} onChange={(e) => setForm({ ...form, award: e.target.value })} className="input-clean w-full text-sm" placeholder="e.g. Most Active Member, Prayer Warrior" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Photo URL</label>
+            <input value={form.photo_url} onChange={(e) => setForm({ ...form, photo_url: e.target.value })} className="input-clean w-full text-sm" placeholder="https://… (upload via media manager first)" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Description</label>
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="input-clean w-full text-sm resize-none" placeholder="Why are they featured? What did they do?" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Period</label>
+            <select value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} className="input-clean w-full text-sm">
+              <option value="week">Star of the Week</option>
+              <option value="month">Star of the Month</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Period Label *</label>
+            <input value={form.period_label} onChange={(e) => setForm({ ...form, period_label: e.target.value })} className="input-clean w-full text-sm" placeholder="e.g. Week of 12 May 2026" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Expires At (optional)</label>
+            <input type="datetime-local" value={form.expires_at} onChange={(e) => setForm({ ...form, expires_at: e.target.value })} className="input-clean w-full text-sm" />
+          </div>
+        </div>
+        <div className="flex justify-end mt-4">
+          <button onClick={create} disabled={creating} className="btn-primary inline-flex items-center gap-2">
+            {creating && <Loader2 size={14} className="animate-spin" />}<Crown size={14} /> Feature Star
+          </button>
+        </div>
+      </div>
+
+      {/* Stars list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-[var(--text-secondary)]">{stars.length} active star{stars.length !== 1 ? "s" : ""}</span>
+          <button onClick={() => setShowAll(!showAll)} className="text-xs text-[var(--brand-accent)] hover:underline">{showAll ? "Active only" : `Show all (${allStars.length})`}</button>
+        </div>
+        {displayed.length === 0 && <div className="card-surface p-6 text-sm text-[var(--text-secondary)] text-center">No CPM Stars yet — feature your first member above!</div>}
+        {displayed.map((s) => (
+          <div key={s.id} className={`card-surface p-4 flex items-start gap-4 ${!s.active ? "opacity-60" : ""}`}>
+            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-xl font-display shrink-0 ring-2 ring-[var(--brand-accent)]/30">
+              {s.photo_url ? <img src={s.photo_url} alt={s.member_name} className="w-full h-full object-cover" /> : s.member_name?.[0]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-[var(--brand-primary)]">{s.member_name}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--brand-accent)]/15 text-[var(--brand-accent)] font-bold border border-[var(--brand-accent)]/30">
+                  {s.period === "week" ? "⭐ Star of the Week" : "🌟 Star of the Month"}
+                </span>
+                {!s.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">Inactive</span>}
+              </div>
+              <div className="text-xs text-[var(--brand-accent)] font-semibold mt-0.5">{s.award}</div>
+              <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{s.period_label}</div>
+              {s.description && <div className="text-xs text-[var(--text-secondary)] mt-1 line-clamp-2">{s.description}</div>}
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => toggle(s)} className={`text-xs px-3 py-1.5 rounded-md border font-semibold ${s.active ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>
+                {s.active ? "Deactivate" : "Activate"}
+              </button>
+              <button onClick={() => remove(s.id, s.member_name)} className="text-xs px-3 py-1.5 rounded-md border border-red-200 text-red-700 hover:bg-red-50"><Trash2 size={12} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [tab, setTab] = useState("settings");
   const [pendingParishCount, setPendingParishCount] = useState(0);
@@ -1719,6 +1995,8 @@ export default function Admin() {
     { k: "cpmwave",        l: "CPM Wave",                  icon: Music },
     { k: "integrations",   l: "Integrations",              icon: Zap },
     { k: "audit",          l: "Audit Log",                 icon: History },
+    { k: "contests",       l: "Contests",                  icon: Trophy },
+    { k: "cpm-stars",      l: "CPM Stars",                 icon: Crown },
   ];
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -1758,6 +2036,8 @@ export default function Admin() {
       {tab === "cpmwave" && <CPMWaveManager />}
       {tab === "integrations" && <IntegrationsManager />}
       {tab === "audit" && <AuditManager />}
+      {tab === "contests" && <ContestsManager />}
+      {tab === "cpm-stars" && <CpmStarsManager />}
     </div>
   );
 }

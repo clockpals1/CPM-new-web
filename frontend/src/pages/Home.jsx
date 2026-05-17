@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   Church, Heart, Users, Calendar, MapPin, ArrowRight,
   Sparkles, Globe, Music, HandHelping, CheckCircle, ChevronRight, MessageCircle,
-  Play, Radio, CalendarClock, X, Check, UserPlus,
+  Play, Radio, CalendarClock, X, Check, UserPlus, Crown, Trophy, Star,
 } from "lucide-react";
 
 // ── Skeleton loader ───────────────────────────────────────────────────────
@@ -258,6 +258,192 @@ function IntroduceYourselfBanner({ parish }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── CPM Stars Widget ──────────────────────────────────────────────────────
+function CpmStarsWidget() {
+  const [stars, setStars] = useState([]);
+  useEffect(() => {
+    http.get("/cpm-stars").then((r) => setStars(r.data)).catch(() => {});
+  }, []);
+  if (stars.length === 0) return null;
+  return (
+    <section data-testid="cpm-stars-widget">
+      <div className="flex items-center justify-between mb-3">
+        <div className="inline-flex items-center gap-2">
+          <Crown size={15} className="text-[var(--brand-accent)]" />
+          <h2 className="font-display text-xl text-[var(--brand-primary)]">CPM Stars</h2>
+        </div>
+        {stars[0]?.period_label && (
+          <span className="text-xs text-[var(--text-tertiary)]">{stars[0].period_label}</span>
+        )}
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x snap-mandatory">
+        {stars.map((s) => (
+          <div
+            key={s.id}
+            className="shrink-0 snap-start w-44 relative overflow-hidden rounded-2xl"
+            style={{ background: "linear-gradient(135deg, #0F1E38 0%, #1a3060 100%)" }}
+          >
+            <div
+              className="absolute -top-6 -right-6 w-28 h-28 opacity-15 pointer-events-none rounded-full"
+              style={{ background: "radial-gradient(circle, #C5A028, transparent)" }}
+            />
+            <div className="relative p-4 flex flex-col items-center text-center gap-2.5">
+              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-white/10 grid place-items-center ring-2 ring-[var(--brand-accent)]/60 shadow-lg">
+                {s.photo_url
+                  ? <img src={s.photo_url} alt={s.member_name} className="w-full h-full object-cover" />
+                  : <span className="text-3xl font-display text-white">{(s.member_name || "?")[0]}</span>}
+              </div>
+              <div>
+                <div className="text-[9px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">
+                  {s.period === "week" ? "⭐ Star of the Week" : "🌟 Star of the Month"}
+                </div>
+                <div className="text-sm font-semibold text-white leading-tight">{s.member_name}</div>
+                <div className="text-[11px] text-white/70 mt-0.5 leading-tight line-clamp-2">{s.award}</div>
+              </div>
+              {s.description && (
+                <div className="text-[10px] text-white/50 leading-tight line-clamp-2">{s.description}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ── Active Contests Widget ────────────────────────────────────────────────
+function ActiveContestsWidget() {
+  const [contests, setContests] = useState([]);
+  useEffect(() => {
+    http.get("/contests", { params: { status: "active" } })
+      .then((r) => setContests(r.data.slice(0, 3)))
+      .catch(() => {});
+  }, []);
+  if (contests.length === 0) return null;
+  const ICON = { photo: "📸", video: "🎬", verse: "📖", testimony: "✨" };
+  const diff = (endAt) => {
+    const d = new Date(endAt) - Date.now();
+    if (d <= 0) return "Ended";
+    const days = Math.floor(d / 86400000);
+    const hrs = Math.floor((d % 86400000) / 3600000);
+    return days > 0 ? `${days}d left` : `${hrs}h left`;
+  };
+  return (
+    <section data-testid="active-contests-widget">
+      <div className="flex items-center justify-between mb-3">
+        <div className="inline-flex items-center gap-2">
+          <Trophy size={15} className="text-[var(--brand-accent)]" />
+          <h2 className="font-display text-xl text-[var(--brand-primary)]">Active Contests</h2>
+        </div>
+        <Link to="/app/contests" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
+          View all <ArrowRight size={13} />
+        </Link>
+      </div>
+      <div className="space-y-2">
+        {contests.map((c) => (
+          <Link
+            key={c.id}
+            to="/app/contests"
+            className="card-surface p-4 flex items-center gap-3 group hover:border-[var(--brand-accent)] transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[var(--brand-accent)]/10 grid place-items-center shrink-0 text-xl">
+              {ICON[c.type] || "🏆"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-[var(--brand-primary)] truncate leading-tight">{c.title}</div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {c.prize && <span className="text-xs text-[var(--brand-accent)] truncate font-medium">🏆 {c.prize}</span>}
+                <span className="text-xs text-[var(--text-tertiary)]">{diff(c.end_at)}</span>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-[var(--brand-accent)] shrink-0 group-hover:translate-x-0.5 transition-transform">
+              Enter →
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ── Live Parish Feed Preview ──────────────────────────────────────────────
+function LiveParishFeedPreview({ parishId }) {
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!parishId) return;
+    http.get("/posts", { params: { scope: "parish", parish_id: parishId } })
+      .then((r) => setPosts(r.data.slice(0, 5)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [parishId]);
+  return (
+    <section data-testid="live-feed-preview">
+      <div className="flex items-center justify-between mb-3">
+        <div className="inline-flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <h2 className="font-display text-xl text-[var(--brand-primary)]">Parish Feed</h2>
+        </div>
+        <Link to="/app/parish-feed" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
+          Open feed <ArrowRight size={13} />
+        </Link>
+      </div>
+      {loading ? (
+        <div className="space-y-3 animate-pulse">
+          {[1, 2, 3].map((n) => <div key={n} className="card-surface h-[72px]" />)}
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="card-surface p-6 text-center space-y-2">
+          <MessageCircle size={20} className="mx-auto text-[var(--text-tertiary)] opacity-40" />
+          <p className="text-sm text-[var(--text-secondary)]">The feed is quiet — be the first to post!</p>
+          <Link to="/app/parish-feed" className="text-xs text-[var(--brand-accent)] font-semibold hover:underline">
+            Open Parish Feed →
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {posts.map((post) => (
+            <Link
+              key={post.id}
+              to="/app/parish-feed"
+              className="card-surface p-4 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors"
+            >
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-sm font-display shrink-0">
+                {post.user_avatar
+                  ? <img src={post.user_avatar} alt="" className="w-full h-full object-cover" />
+                  : (post.user_name || "?")?.[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-[var(--brand-primary)] truncate">{post.user_name}</span>
+                  <span className="text-xs text-[var(--text-tertiary)] shrink-0">
+                    {new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  </span>
+                </div>
+                {post.body && (
+                  <p className="text-sm text-[var(--text-secondary)] mt-0.5 line-clamp-2 leading-relaxed">{post.body}</p>
+                )}
+                {post.media_urls?.length > 0 && (
+                  <span className="text-xs text-[var(--text-tertiary)] mt-0.5 inline-block">
+                    📎 {post.media_urls.length} attachment{post.media_urls.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              <ChevronRight size={14} className="text-[var(--text-tertiary)] group-hover:text-[var(--brand-accent)] shrink-0 mt-1 transition-colors" />
+            </Link>
+          ))}
+          <Link
+            to="/app/parish-feed"
+            className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-[var(--border-default)] text-sm text-[var(--brand-accent)] font-semibold hover:border-[var(--brand-accent)] hover:bg-[var(--brand-accent)]/5 transition-colors"
+          >
+            <MessageCircle size={14} /> See all parish posts
+          </Link>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -523,11 +709,20 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
         </div>
       </div>
 
-      {/* Introduce Yourself Banner — shown once to new members */}
-      <IntroduceYourselfBanner parish={p} />
+      {/* CPM Stars of the Week/Month */}
+      <CpmStarsWidget />
 
-      {/* Getting Started checklist */}
-      <GettingStartedCard user={user} memberships={memberships} />
+      {/* 🔴 Live Parish Feed — most engaging, shown first */}
+      <LiveParishFeedPreview parishId={active?.parish_id} />
+
+      {/* Active Contests */}
+      <ActiveContestsWidget />
+
+      {/* Engagement rail */}
+      <EngagementRail />
+
+      {/* Meet Brethren */}
+      <MeetBrethrenStrip parish={p} currentUserId={user?.id} />
 
       {/* Parish switcher for 2 parishes */}
       {memberships.length > 1 && (
@@ -558,111 +753,63 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
         </div>
       )}
 
-      {/* Engagement rail */}
-      <EngagementRail />
-
-      {/* Meet Brethren — horizontal scroll of members from same country */}
-      <MeetBrethrenStrip parish={p} currentUserId={user?.id} />
-
-      {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Parishes", v: stats.parishes ?? "–", icon: Church },
-          { label: "Members", v: stats.members ?? "–", icon: Users },
-          { label: "Prayers", v: stats.prayers ?? "–", icon: Heart },
-          { label: "Events", v: stats.events ?? "–", icon: Calendar },
-        ].map(({ label, v, icon: Icon }) => (
-          <div key={label} className="card-surface p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] grid place-items-center shrink-0">
-              <Icon size={16} className="text-[var(--brand-primary)]" />
-            </div>
-            <div>
-              <div className="font-display text-xl text-[var(--brand-primary)]">{v}</div>
-              <div className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">{label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Prayers + Events */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-xl text-[var(--brand-primary)]">Recent Prayers</h2>
-            <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
-              View all <ArrowRight size={13} />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {prayers.length === 0 ? (
-              <div className="card-surface p-5 text-sm text-[var(--text-secondary)]">
-                Be the first to post a prayer.{" "}
-                <Link to="/app/prayer" className="text-[var(--brand-accent)] underline">Open wall →</Link>
-              </div>
-            ) : prayers.map((p) => (
-              <div key={p.id} className="card-surface p-4" data-testid={`home-prayer-${p.id}`}>
-                <div className="flex items-start gap-2">
-                  <Heart size={13} className="text-[var(--brand-accent)] mt-0.5 shrink-0" />
-                  <div>
-                    <div className="text-sm font-medium text-[var(--brand-primary)] line-clamp-1">{p.title}</div>
-                    <div className="text-sm text-[var(--text-secondary)] mt-0.5 line-clamp-2">{p.body}</div>
-                    <div className="text-xs text-[var(--text-tertiary)] mt-1.5">
-                      {p.user_name} · {p.prayed_count || 0} prayed
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
+      {/* Events + Prayers compact grid */}
+      <div className="grid lg:grid-cols-2 gap-5">
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-xl text-[var(--brand-primary)]">Upcoming Events</h2>
             <Link to="/app/events" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
-              View all <ArrowRight size={13} />
+              All <ArrowRight size={13} />
             </Link>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {events.length === 0 ? (
-              <div className="card-surface p-5 text-sm text-[var(--text-secondary)]">
-                No events scheduled yet.{" "}
-                <Link to="/app/events" className="text-[var(--brand-accent)] underline">Check events →</Link>
+              <div className="card-surface p-4 text-sm text-[var(--text-secondary)]">
+                No events yet. <Link to="/app/events" className="text-[var(--brand-accent)] hover:underline">Check events →</Link>
               </div>
-            ) : events.map((ev) => (
-              <div key={ev.id} className="card-surface p-4" data-testid={`home-event-${ev.id}`}>
-                <div className="text-xs uppercase tracking-wider text-[var(--brand-accent)]">{ev.category}</div>
-                <div className="font-display text-lg text-[var(--brand-primary)] mt-0.5 leading-snug">{ev.title}</div>
-                <div className="text-xs text-[var(--text-tertiary)] mt-1">
-                  {new Date(ev.starts_at).toLocaleString()}
+            ) : events.slice(0, 3).map((ev) => (
+              <Link key={ev.id} to="/app/events" className="card-surface p-3 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors" data-testid={`home-event-${ev.id}`}>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 grid place-items-center shrink-0">
+                  <Calendar size={15} className="text-emerald-600" />
                 </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-[var(--brand-primary)] truncate">{ev.title}</div>
+                  <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                    {new Date(ev.starts_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-xl text-[var(--brand-primary)]">Prayer Wall</h2>
+            <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
+              All <ArrowRight size={13} />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {prayers.length === 0 ? (
+              <div className="card-surface p-4 text-sm text-[var(--text-secondary)]">
+                <Link to="/app/prayer" className="text-[var(--brand-accent)] hover:underline">Post a prayer request →</Link>
               </div>
+            ) : prayers.slice(0, 3).map((pr) => (
+              <Link key={pr.id} to="/app/prayer" className="card-surface p-3 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors" data-testid={`home-prayer-${pr.id}`}>
+                <Heart size={13} className="text-[var(--brand-accent)] mt-1 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-[var(--brand-primary)] line-clamp-1">{pr.title}</div>
+                  <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{pr.user_name} · {pr.prayed_count || 0} prayed</div>
+                </div>
+              </Link>
             ))}
           </div>
         </section>
       </div>
 
-      {/* Explore more */}
-      <div className="grid sm:grid-cols-3 gap-4">
-        {[
-          { to: "/app/feed", icon: Globe, label: "Global Feed", desc: "What Celestials worldwide are sharing." },
-          { to: "/app/meet", icon: Users, label: "Meet People", desc: "Connect with brethren near you." },
-          { to: "/app/testimonies", icon: Sparkles, label: "Testimonies", desc: "Share your answered prayers." },
-        ].map(({ to, icon: Icon, label, desc }) => (
-          <Link
-            key={to}
-            to={to}
-            className="card-surface p-5 hover:border-[var(--brand-accent)] transition-colors group"
-          >
-            <Icon size={19} className="text-[var(--brand-accent)] mb-3" />
-            <div className="font-display text-lg text-[var(--brand-primary)]">{label}</div>
-            <p className="text-sm text-[var(--text-secondary)] mt-1">{desc}</p>
-            <div className="mt-3 text-xs text-[var(--brand-accent)] inline-flex items-center gap-1 group-hover:gap-2 transition-all">
-              Explore <ArrowRight size={12} />
-            </div>
-          </Link>
-        ))}
-      </div>
+      {/* Onboarding — shown only for new/incomplete users at the bottom */}
+      <IntroduceYourselfBanner parish={p} />
+      <GettingStartedCard user={user} memberships={memberships} />
     </div>
   );
 }
