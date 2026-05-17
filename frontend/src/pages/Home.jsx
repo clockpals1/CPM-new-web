@@ -631,24 +631,22 @@ function ActiveContestsWidget() {
   );
 }
 
-// ── Global Pulse Strip — Instagram-story-style worldwide CCC activity ────
+// ── Global Pulse Strip — clean post-preview cards ────────────────────────
 function GlobalPulseStrip() {
   const [posts, setPosts] = useState([]);
   useEffect(() => {
     http.get("/posts", { params: { scope: "global" } })
-      .then((r) => setPosts(r.data.slice(0, 9)))
+      .then((r) => setPosts(r.data.slice(0, 8)))
       .catch(() => {});
   }, []);
   if (posts.length === 0) return null;
 
-  const GRADIENTS = [
-    "linear-gradient(160deg,#0F1E38,#1a3060)",
-    "linear-gradient(160deg,#1a2f1a,#0d3d1a)",
-    "linear-gradient(160deg,#2d1a38,#3d1060)",
-    "linear-gradient(160deg,#2d1f0a,#5a3800)",
-    "linear-gradient(160deg,#0a1f2d,#083d4f)",
-    "linear-gradient(160deg,#2d0a16,#5a0824)",
-  ];
+  const timeAgo = (iso) => {
+    const d = (Date.now() - new Date(iso)) / 1000;
+    if (d < 3600) return `${Math.floor(d / 60)}m`;
+    if (d < 86400) return `${Math.floor(d / 3600)}h`;
+    return `${Math.floor(d / 86400)}d`;
+  };
 
   return (
     <section data-testid="global-pulse-strip">
@@ -663,57 +661,71 @@ function GlobalPulseStrip() {
         </Link>
       </div>
 
-      {/* Story-style cards */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x snap-mandatory">
-        {posts.map((post, i) => (
+        {posts.map((post) => (
           <Link
             key={post.id}
             to="/app/feed"
-            className="shrink-0 snap-start w-32 h-44 rounded-2xl overflow-hidden relative group cursor-pointer"
-            style={{ background: GRADIENTS[i % GRADIENTS.length] }}
+            className="shrink-0 snap-start w-64 card-surface p-4 flex flex-col gap-2.5 hover:border-[var(--brand-accent)] transition-colors group"
           >
-            {/* Background media */}
-            {post.media_urls?.[0] && (
-              <img
-                src={post.media_urls[0]}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity"
-              />
-            )}
-            {/* Gold ring gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-            {/* Content */}
-            <div className="absolute inset-0 p-3 flex flex-col justify-between">
-              {/* Avatar ring — like Instagram story ring */}
-              <div className="w-9 h-9 rounded-full overflow-hidden bg-white/15 border-2 border-[var(--brand-accent)] grid place-items-center text-white text-xs font-display shadow-lg shrink-0">
+            {/* Header row */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-sm font-display shrink-0 ring-2 ring-[var(--brand-accent)]/20">
                 {post.user_avatar
                   ? <img src={post.user_avatar} alt="" className="w-full h-full object-cover" />
                   : (post.user_name || "?")[0]}
               </div>
-              {/* Bottom info */}
-              <div>
-                <div className="text-white text-[11px] font-semibold leading-tight truncate">{post.user_name}</div>
-                {post.parish_name && (
-                  <div className="text-white/55 text-[9px] leading-tight truncate mt-0.5">{post.parish_name}</div>
-                )}
-                <div className="text-white/80 text-[10px] leading-snug mt-1 line-clamp-3">{post.body}</div>
-                {post.media_urls?.length > 0 && !post.body && (
-                  <div className="text-white/60 text-[9px] mt-1">📸 Photo shared</div>
-                )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-[var(--brand-primary)] truncate leading-tight">{post.user_name}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{timeAgo(post.created_at)} ago</div>
               </div>
+            </div>
+
+            {/* Parish location badge */}
+            {post.parish_name && (
+              <div className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-full bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/20 text-[10px] text-[var(--brand-accent)] font-semibold">
+                <MapPin size={9} />{post.parish_name}
+              </div>
+            )}
+
+            {/* Body */}
+            {post.body && (
+              <p className="text-sm text-[var(--text-secondary)] line-clamp-3 leading-relaxed flex-1">{post.body}</p>
+            )}
+
+            {/* Media thumbnail */}
+            {post.media_urls?.[0] && (
+              <div className="rounded-xl overflow-hidden h-28 bg-[var(--bg-subtle)] shrink-0">
+                <img src={post.media_urls[0]} alt="" className="w-full h-full object-cover" />
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-[var(--border-default)] mt-auto">
+              <span className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
+                <Heart size={11} className="text-rose-400" />
+                {post.amen_count || post.reactions?.amen || 0} Amen
+              </span>
+              <span className="text-[11px] text-[var(--brand-accent)] font-semibold group-hover:underline">
+                Read more →
+              </span>
             </div>
           </Link>
         ))}
 
-        {/* "See more" card */}
+        {/* See all portal */}
         <Link
           to="/app/feed"
-          className="shrink-0 snap-start w-32 h-44 rounded-2xl border-2 border-dashed border-[var(--border-default)] flex flex-col items-center justify-center gap-2 text-[var(--text-secondary)] hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)] transition-all group"
+          className="shrink-0 snap-start w-40 rounded-2xl border-2 border-dashed border-[var(--border-default)] flex flex-col items-center justify-center gap-2.5 text-[var(--text-secondary)] hover:border-[var(--brand-accent)] hover:bg-[var(--brand-accent)]/5 transition-all group"
+          style={{ minHeight: "160px" }}
         >
-          <div className="w-10 h-10 rounded-full bg-[var(--bg-subtle)] grid place-items-center group-hover:bg-[var(--brand-accent)]/10 transition-colors">
-            <Globe size={18} className="text-[var(--brand-accent)]" />
+          <div className="w-11 h-11 rounded-full bg-[var(--bg-subtle)] grid place-items-center group-hover:bg-[var(--brand-accent)]/15 transition-colors">
+            <Globe size={20} className="text-[var(--brand-accent)]" />
           </div>
-          <span className="text-[10px] text-center font-semibold px-2 leading-tight">See all worldwide</span>
+          <div className="text-center px-3">
+            <div className="text-xs font-bold text-[var(--brand-primary)]">See all</div>
+            <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">worldwide posts</div>
+          </div>
         </Link>
       </div>
     </section>
