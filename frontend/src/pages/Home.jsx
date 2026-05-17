@@ -138,8 +138,8 @@ function DailyMomentCard({ user, parish }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-1 font-semibold">{greeting}</div>
-            <h1 className="font-display text-[2rem] text-white leading-tight">{firstName}</h1>
-            <div className={`text-sm mt-1 font-medium ${occasion.color}`}>{occasion.label}</div>
+            <h1 className="font-display text-[2.4rem] text-white leading-tight">{firstName}</h1>
+            <div className={`text-base mt-1 font-semibold ${occasion.color}`}>{occasion.label}</div>
           </div>
           <div className="shrink-0 flex flex-col items-center bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 rounded-2xl px-4 py-3 min-w-[60px]">
             <Flame size={18} className="text-[var(--brand-accent)]" />
@@ -154,8 +154,8 @@ function DailyMomentCard({ user, parish }) {
             <BookOpen size={13} className="text-[var(--brand-accent)]" />
             <span className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold">Today's Scripture</span>
           </div>
-          <p className="text-white/90 text-[15px] leading-relaxed italic">"{scripture.text}"</p>
-          <div className="text-[var(--brand-accent)] text-xs mt-2 font-bold">— {scripture.ref}</div>
+          <p className="text-white/90 text-base leading-relaxed italic">"{scripture.text}"</p>
+          <div className="text-[var(--brand-accent)] text-sm mt-2 font-bold">— {scripture.ref}</div>
         </div>
 
         {/* Row 3: Daily challenge pill */}
@@ -166,7 +166,7 @@ function DailyMomentCard({ user, parish }) {
           <span className="text-2xl shrink-0">{challenge.emoji}</span>
           <div className="flex-1 min-w-0">
             <div className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">Today's nudge</div>
-            <div className="text-white/90 text-[15px] font-medium truncate">{challenge.text}</div>
+            <div className="text-white/90 text-base font-semibold truncate">{challenge.text}</div>
           </div>
           <ChevronRight size={16} className="text-[var(--brand-accent)]/70 shrink-0 group-hover:translate-x-0.5 transition-transform" />
         </Link>
@@ -235,7 +235,7 @@ function QuickAmenStrip() {
       <div className="flex items-center justify-between mb-3">
         <div className="inline-flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shrink-0" />
-          <h2 className="font-display text-xl text-[var(--brand-primary)]">Brethren Need Your Amen</h2>
+          <h2 className="font-display text-2xl text-[var(--brand-primary)]">Brethren Need Your Amen</h2>
         </div>
         <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
           Full wall <ArrowRight size={13} />
@@ -345,7 +345,7 @@ function GettingStartedCard({ user, memberships }) {
       <div className="p-5">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="font-display text-xl text-[var(--brand-primary)]">Getting started</h3>
+            <h3 className="font-display text-2xl text-[var(--brand-primary)]">Getting started</h3>
             <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
               {doneCount}/{steps.length} steps &middot;{" "}
               <span className="text-[var(--brand-accent)] font-semibold">{pct}% complete</span>
@@ -417,7 +417,7 @@ function MeetBrethrenStrip({ parish, currentUserId }) {
     <section data-testid="meet-brethren-strip">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="font-display text-xl text-[var(--brand-primary)]">Brethren in your region</h2>
+          <h2 className="font-display text-2xl text-[var(--brand-primary)]">Brethren in your region</h2>
           <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Members from {parish.country}</p>
         </div>
         <Link
@@ -533,8 +533,8 @@ function CpmStarsWidget() {
     <section data-testid="cpm-stars-widget">
       <div className="flex items-center justify-between mb-3">
         <div className="inline-flex items-center gap-2">
-          <Crown size={15} className="text-[var(--brand-accent)]" />
-          <h2 className="font-display text-xl text-[var(--brand-primary)]">CPM Stars</h2>
+          <Crown size={18} className="text-[var(--brand-accent)]" />
+          <h2 className="font-display text-2xl text-[var(--brand-primary)]">CPM Stars</h2>
         </div>
         {stars[0]?.period_label && (
           <span className="text-xs text-[var(--text-tertiary)]">{stars[0].period_label}</span>
@@ -596,8 +596,8 @@ function ActiveContestsWidget() {
     <section data-testid="active-contests-widget">
       <div className="flex items-center justify-between mb-3">
         <div className="inline-flex items-center gap-2">
-          <Trophy size={15} className="text-[var(--brand-accent)]" />
-          <h2 className="font-display text-xl text-[var(--brand-primary)]">Active Contests</h2>
+          <Trophy size={18} className="text-[var(--brand-accent)]" />
+          <h2 className="font-display text-2xl text-[var(--brand-primary)]">Active Contests</h2>
         </div>
         <Link to="/app/contests" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
           View all <ArrowRight size={13} />
@@ -614,7 +614,7 @@ function ActiveContestsWidget() {
               {ICON[c.type] || "🏆"}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-[var(--brand-primary)] truncate leading-tight">{c.title}</div>
+              <div className="text-base font-semibold text-[var(--brand-primary)] truncate leading-tight">{c.title}</div>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 {c.prize && <span className="text-xs text-[var(--brand-accent)] truncate font-medium">🏆 {c.prize}</span>}
                 <span className="text-xs text-[var(--text-tertiary)]">{diff(c.end_at)}</span>
@@ -651,8 +651,8 @@ function GlobalPulseStrip() {
     <section data-testid="global-pulse-strip">
       <div className="flex items-center justify-between mb-3">
         <div className="inline-flex items-center gap-2">
-          <Globe size={15} className="text-[var(--brand-accent)]" />
-          <h2 className="font-display text-xl text-[var(--brand-primary)]">CCC Worldwide</h2>
+          <Globe size={18} className="text-[var(--brand-accent)]" />
+          <h2 className="font-display text-2xl text-[var(--brand-primary)]">CCC Worldwide</h2>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         </div>
         <Link to="/app/feed" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
@@ -919,7 +919,7 @@ function DiscoveryState({ user, prayers, stats }) {
               </div>
               <span className="font-display text-3xl text-[var(--border-default)] select-none">{n}</span>
             </div>
-            <h3 className="font-display text-xl text-[var(--brand-primary)] mb-2">{title}</h3>
+            <h3 className="font-display text-2xl text-[var(--brand-primary)] mb-2">{title}</h3>
             <p className="text-sm text-[var(--text-secondary)] mb-4 leading-relaxed">{desc}</p>
             <Link
               to={link}
@@ -934,7 +934,7 @@ function DiscoveryState({ user, prayers, stats }) {
       {/* Community stats */}
       {Object.keys(stats).length > 0 && (
         <div className="card-surface p-6">
-          <h2 className="font-display text-xl text-[var(--brand-primary)] mb-5">Your community, worldwide</h2>
+          <h2 className="font-display text-2xl text-[var(--brand-primary)] mb-5">Your community, worldwide</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
               { label: "Parishes", v: stats.parishes ?? "–", icon: Church },
@@ -960,7 +960,7 @@ function DiscoveryState({ user, prayers, stats }) {
       {prayers.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-xl text-[var(--brand-primary)]">Brethren are praying</h2>
+            <h2 className="font-display text-2xl text-[var(--brand-primary)]">Brethren are praying</h2>
             <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
               Prayer wall <ArrowRight size={13} />
             </Link>
@@ -1119,7 +1119,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
       <div className="grid lg:grid-cols-2 gap-5">
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-xl text-[var(--brand-primary)]">Upcoming Events</h2>
+            <h2 className="font-display text-2xl text-[var(--brand-primary)]">Upcoming Events</h2>
             <Link to="/app/events" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
               All <ArrowRight size={13} />
             </Link>
@@ -1130,13 +1130,13 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
                 No events yet. <Link to="/app/events" className="text-[var(--brand-accent)] hover:underline">Check events →</Link>
               </div>
             ) : events.slice(0, 3).map((ev) => (
-              <Link key={ev.id} to="/app/events" className="card-surface p-3 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors" data-testid={`home-event-${ev.id}`}>
+              <Link key={ev.id} to="/app/events" className="card-surface p-4 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors" data-testid={`home-event-${ev.id}`}>
                 <div className="w-9 h-9 rounded-lg bg-emerald-50 grid place-items-center shrink-0">
                   <Calendar size={15} className="text-emerald-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[var(--brand-primary)] truncate">{ev.title}</div>
-                  <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                  <div className="text-base font-semibold text-[var(--brand-primary)] truncate">{ev.title}</div>
+                  <div className="text-sm text-[var(--text-tertiary)] mt-0.5">
                     {new Date(ev.starts_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
                   </div>
                 </div>
@@ -1146,7 +1146,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
         </section>
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-xl text-[var(--brand-primary)]">Prayer Wall</h2>
+            <h2 className="font-display text-2xl text-[var(--brand-primary)]">Prayer Wall</h2>
             <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
               All <ArrowRight size={13} />
             </Link>
@@ -1157,11 +1157,11 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
                 <Link to="/app/prayer" className="text-[var(--brand-accent)] hover:underline">Post a prayer request →</Link>
               </div>
             ) : prayers.slice(0, 3).map((pr) => (
-              <Link key={pr.id} to="/app/prayer" className="card-surface p-3 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors" data-testid={`home-prayer-${pr.id}`}>
+              <Link key={pr.id} to="/app/prayer" className="card-surface p-4 flex items-start gap-3 group hover:border-[var(--brand-accent)] transition-colors" data-testid={`home-prayer-${pr.id}`}>
                 <Heart size={13} className="text-[var(--brand-accent)] mt-1 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[var(--brand-primary)] line-clamp-1">{pr.title}</div>
-                  <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{pr.user_name} · {pr.prayed_count || 0} prayed</div>
+                  <div className="text-base font-semibold text-[var(--brand-primary)] line-clamp-1">{pr.title}</div>
+                  <div className="text-sm text-[var(--text-tertiary)] mt-0.5">{pr.user_name} · {pr.prayed_count || 0} prayed</div>
                 </div>
               </Link>
             ))}

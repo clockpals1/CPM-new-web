@@ -49,12 +49,20 @@
 * { border-color: var(--border-default); }
 
 html, body, #root { height: 100%; }
+
+/* Mobile root font scale — bumps all rem-based text without touching components */
+@media (max-width: 640px) {
+    html { font-size: 17px; }
+}
+
 body {
     margin: 0;
     background: var(--bg-default);
     color: var(--text-primary);
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 .font-display { font-family: 'Cormorant Garamond', serif; letter-spacing: -0.01em; }
