@@ -445,7 +445,7 @@ function MeetBrethrenStrip({ parish, currentUserId }) {
               {m.name?.split(" ")[0]}
             </span>
             {m.ccc_rank && (
-              <span className="text-[9px] text-[var(--text-tertiary)] text-center leading-tight truncate w-full">
+              <span className="text-[11px] text-[var(--text-tertiary)] text-center leading-tight truncate w-full">
                 {m.ccc_rank}
               </span>
             )}
