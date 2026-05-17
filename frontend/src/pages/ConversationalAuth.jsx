@@ -4,7 +4,7 @@ import { http, formatErr } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import {
   ArrowRight, Loader2, Search, X, CheckCircle2, Church, MapPin,
-  Phone, User, Plus, AlertCircle, Building2,
+  Phone, User, Plus, AlertCircle, Building2, Sparkles,
 } from "lucide-react";
 
 const ranksForMen = [
@@ -498,9 +498,14 @@ export default function ConversationalAuth({ mode: initialMode = "auto" }) {
   return (
     <div className="min-h-screen w-full grid place-items-center px-4 py-10" style={{ background: "linear-gradient(180deg, #FDFBF7 0%, #F3EFE9 100%)" }}>
       <div className="w-full max-w-xl">
-        <Link to="/" className="flex items-center gap-2 mb-8 justify-center" data-testid="auth-logo">
-          <div className="w-10 h-10 rounded-md bg-[var(--brand-primary)] text-white grid place-items-center font-display text-2xl">C</div>
-          <div className="text-[var(--brand-primary)] font-display text-xl leading-tight">CelestialPeopleMeeet</div>
+        <Link to="/" className="flex items-center gap-3 mb-8 justify-center" data-testid="auth-logo">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--brand-primary)] grid place-items-center shrink-0 shadow-lg">
+            <Sparkles size={22} className="text-[var(--brand-accent)]" />
+          </div>
+          <div>
+            <div className="font-brand text-2xl text-[var(--brand-primary)] leading-none">CPM</div>
+            <div className="text-xs uppercase tracking-[0.22em] text-[var(--text-tertiary)] mt-1">Celestial People Meet</div>
+          </div>
         </Link>
 
         <div className="card-surface p-7 md:p-10 fade-in" key={step}>

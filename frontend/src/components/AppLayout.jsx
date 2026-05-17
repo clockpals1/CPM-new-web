@@ -215,11 +215,13 @@ export default function AppLayout({ children }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 fixed left-0 top-0 h-full bg-[var(--bg-paper)] border-r border-[var(--border-default)]">
         <div className="px-6 pt-6 pb-4">
-          <Link to="/app" className="flex items-center gap-2" data-testid="sidebar-logo">
-            <div className="w-9 h-9 rounded-md bg-[var(--brand-primary)] text-white grid place-items-center font-display text-xl">C</div>
+          <Link to="/app" className="flex items-center gap-3" data-testid="sidebar-logo">
+            <div className="w-10 h-10 rounded-xl bg-[var(--brand-primary)] grid place-items-center shrink-0">
+              <Sparkles size={18} className="text-[var(--brand-accent)]" />
+            </div>
             <div>
-              <div className="font-display text-lg leading-tight text-[var(--brand-primary)]">Celestial</div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-tertiary)]">People Meeet</div>
+              <div className="font-brand text-xl leading-none text-[var(--brand-primary)]">CPM</div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-[var(--text-tertiary)] mt-0.5">Celestial People Meet</div>
             </div>
           </Link>
         </div>
@@ -279,8 +281,10 @@ export default function AppLayout({ children }) {
           <div className="flex items-center justify-between px-4 md:px-8 h-14">
             {/* Mobile brand */}
             <div className="flex items-center gap-2 md:hidden">
-              <div className="w-8 h-8 rounded-lg bg-[var(--brand-primary)] text-white grid place-items-center font-display text-base">C</div>
-              <span className="font-display text-base text-[var(--brand-primary)]">Celestial</span>
+              <div className="w-8 h-8 rounded-lg bg-[var(--brand-primary)] grid place-items-center shrink-0">
+                <Sparkles size={15} className="text-[var(--brand-accent)]" />
+              </div>
+              <span className="font-brand text-lg text-[var(--brand-primary)]">CPM</span>
             </div>
             {/* Desktop search */}
             <div className="hidden md:flex items-center gap-3 flex-1 max-w-xl">

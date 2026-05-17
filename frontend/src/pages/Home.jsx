@@ -133,7 +133,7 @@ function DailyMomentCard({ user, parish }) {
         style={{ background: "radial-gradient(circle, #4F6BB0, transparent)" }}
       />
 
-      <div className="relative px-6 py-6 md:px-8 md:py-7 space-y-4">
+      <div className="relative px-6 py-7 md:px-8 md:py-8 space-y-5">
         {/* Row 1: Greeting + streak */}
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -187,7 +187,7 @@ function DailyMomentCard({ user, parish }) {
               <Link
                 key={to}
                 to={to}
-                className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-white/10 active:bg-white/25 text-white transition-colors"
+                className="flex flex-col items-center gap-1.5 py-3.5 rounded-xl bg-white/10 active:bg-white/25 text-white transition-colors"
               >
                 <Icon size={18} />
                 <span className="text-xs font-semibold opacity-90">{label}</span>
@@ -232,7 +232,7 @@ function QuickAmenStrip() {
 
   return (
     <section data-testid="quick-amen-strip">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="inline-flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shrink-0" />
           <h2 className="font-display text-2xl text-[var(--brand-primary)]">Brethren Need Your Amen</h2>
@@ -415,7 +415,7 @@ function MeetBrethrenStrip({ parish, currentUserId }) {
 
   return (
     <section data-testid="meet-brethren-strip">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="font-display text-2xl text-[var(--brand-primary)]">Brethren in your region</h2>
           <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Members from {parish.country}</p>
@@ -531,7 +531,7 @@ function CpmStarsWidget() {
   if (stars.length === 0) return null;
   return (
     <section data-testid="cpm-stars-widget">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="inline-flex items-center gap-2">
           <Crown size={18} className="text-[var(--brand-accent)]" />
           <h2 className="font-display text-2xl text-[var(--brand-primary)]">CPM Stars</h2>
@@ -594,7 +594,7 @@ function ActiveContestsWidget() {
   };
   return (
     <section data-testid="active-contests-widget">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="inline-flex items-center gap-2">
           <Trophy size={18} className="text-[var(--brand-accent)]" />
           <h2 className="font-display text-2xl text-[var(--brand-primary)]">Active Contests</h2>
@@ -649,7 +649,7 @@ function GlobalPulseStrip() {
 
   return (
     <section data-testid="global-pulse-strip">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="inline-flex items-center gap-2">
           <Globe size={18} className="text-[var(--brand-accent)]" />
           <h2 className="font-display text-2xl text-[var(--brand-primary)]">CCC Worldwide</h2>
@@ -1060,7 +1060,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
   const p = active?.parish || {};
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 overflow-x-hidden" data-testid="home-parish-dashboard">
+    <div className="max-w-2xl mx-auto space-y-7 overflow-x-hidden" data-testid="home-parish-dashboard">
 
       {/* ① Daily Moment — fresh every single day */}
       <DailyMomentCard user={user} parish={p} />
@@ -1118,7 +1118,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
       {/* Events + Prayers compact grid */}
       <div className="grid lg:grid-cols-2 gap-5">
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-2xl text-[var(--brand-primary)]">Upcoming Events</h2>
             <Link to="/app/events" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
               All <ArrowRight size={13} />
@@ -1145,7 +1145,7 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
           </div>
         </section>
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-2xl text-[var(--brand-primary)]">Prayer Wall</h2>
             <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1">
               All <ArrowRight size={13} />
