@@ -104,16 +104,26 @@ export default function ChatBot() {
 
   return (
     <>
-      {/* Floating toggle button */}
+      {/* Floating toggle button — pill on bottom-left (mobile), circle on bottom-right (desktop) */}
       <button
         onClick={() => setOpen((o) => !o)}
         data-testid="chatbot-toggle"
-        className="fixed bottom-6 right-5 z-50 w-14 h-14 rounded-full bg-[var(--brand-primary)] text-white shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:bottom-8 md:right-8"
+        className="fixed bottom-20 left-3 z-50 flex items-center gap-2 h-[42px] pl-3.5 pr-4 rounded-full bg-[var(--brand-primary)] text-white shadow-lg ring-2 ring-[var(--brand-accent)]/50 hover:ring-[var(--brand-accent)] active:scale-95 transition-all md:bottom-8 md:right-8 md:left-auto md:w-14 md:h-14 md:px-0 md:justify-center md:ring-0 md:shadow-xl md:hover:scale-105"
         aria-label="Open CPM Assistant"
       >
-        {open ? <ChevronDown size={22} /> : <Bot size={22} />}
+        {open ? (
+          <>
+            <ChevronDown size={17} />
+            <span className="text-[11px] font-semibold tracking-wide md:hidden">Close</span>
+          </>
+        ) : (
+          <>
+            <Bot size={17} />
+            <span className="text-[11px] font-semibold tracking-wide md:hidden">Ask AI</span>
+          </>
+        )}
         {!open && unread > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[var(--brand-accent)] text-white text-[10px] font-bold grid place-items-center">
+          <span className="absolute -top-1.5 -right-1 w-5 h-5 rounded-full bg-[var(--brand-accent)] text-white text-[10px] font-bold grid place-items-center">
             {unread}
           </span>
         )}
@@ -122,7 +132,7 @@ export default function ChatBot() {
       {/* Chat panel */}
       {open && (
         <div
-          className="fixed bottom-24 right-4 z-50 w-[calc(100vw-2rem)] sm:w-96 flex flex-col rounded-2xl shadow-2xl border border-[var(--border-default)] overflow-hidden md:bottom-28 md:right-8"
+          className="fixed bottom-[144px] left-2 right-2 z-50 sm:left-auto sm:right-4 sm:w-96 flex flex-col rounded-2xl shadow-2xl border border-[var(--border-default)] overflow-hidden md:bottom-28 md:right-8 md:left-auto md:w-96"
           style={{ maxHeight: "min(580px, calc(100vh - 10rem))" }}
           data-testid="chatbot-panel"
         >

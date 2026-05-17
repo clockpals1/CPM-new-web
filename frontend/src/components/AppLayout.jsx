@@ -333,16 +333,16 @@ export default function AppLayout({ children }) {
               </NavLink>
             ))}
 
-            {/* More / burger */}
+            {/* More / burger — visually distinct navy pill-tab */}
             <button
               onClick={() => setSheetOpen(true)}
               data-testid="mobile-nav-more"
-              className="flex flex-col items-center justify-center gap-0.5 flex-1 text-[var(--text-tertiary)] active:text-[var(--brand-primary)] transition-colors"
+              className="flex flex-col items-center justify-center gap-0.5 flex-1 text-[var(--brand-primary)] active:opacity-70 transition-opacity"
             >
-              <div className="w-10 h-7 rounded-xl flex items-center justify-center">
-                <Menu size={21} strokeWidth={1.6} />
+              <div className="w-11 h-7 rounded-xl flex items-center justify-center bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/25">
+                <Menu size={18} strokeWidth={2} />
               </div>
-              <span className="text-[10px] font-medium leading-none">More</span>
+              <span className="text-[10px] font-bold leading-none">More</span>
             </button>
           </div>
         </nav>
