@@ -331,7 +331,7 @@ export default function AppLayout({ children }) {
                     }`}>
                       <n.icon size={23} strokeWidth={isActive ? 2.2 : 1.6} />
                     </div>
-                    <span className="text-[11px] font-semibold leading-none tracking-tight">{n.label}</span>
+                    <span className="text-xs font-semibold leading-none tracking-tight">{n.label}</span>
                   </>
                 )}
               </NavLink>
@@ -346,7 +346,7 @@ export default function AppLayout({ children }) {
               <div className="w-12 h-8 rounded-xl flex items-center justify-center bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
                 <Menu size={20} strokeWidth={2} />
               </div>
-              <span className="text-[11px] font-bold leading-none tracking-tight">More</span>
+              <span className="text-xs font-bold leading-none tracking-tight">More</span>
             </button>
           </div>
         </nav>

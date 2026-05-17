@@ -52,7 +52,7 @@ html, body, #root { height: 100%; }
 
 /* Mobile root font scale — bumps all rem-based text without touching components */
 @media (max-width: 640px) {
-    html { font-size: 17px; }
+    html { font-size: 18px; }
 }
 
 body {

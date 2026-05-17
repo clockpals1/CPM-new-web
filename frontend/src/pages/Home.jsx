@@ -144,7 +144,7 @@ function DailyMomentCard({ user, parish }) {
           <div className="shrink-0 flex flex-col items-center bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 rounded-2xl px-4 py-3 min-w-[60px]">
             <Flame size={18} className="text-[var(--brand-accent)]" />
             <span className="text-[var(--brand-accent)] font-display text-2xl leading-none mt-0.5">{streak}</span>
-            <span className="text-[11px] text-white/50 uppercase tracking-wide mt-0.5">day{streak !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-white/50 uppercase tracking-wide mt-0.5">day{streak !== 1 ? "s" : ""}</span>
           </div>
         </div>
 
@@ -152,7 +152,7 @@ function DailyMomentCard({ user, parish }) {
         <div className="bg-white/6 border border-white/10 rounded-xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
             <BookOpen size={13} className="text-[var(--brand-accent)]" />
-            <span className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold">Today's Scripture</span>
+            <span className="text-xs uppercase tracking-widest text-[var(--brand-accent)] font-bold">Today's Scripture</span>
           </div>
           <p className="text-white/90 text-base leading-relaxed italic">"{scripture.text}"</p>
           <div className="text-[var(--brand-accent)] text-sm mt-2 font-bold">— {scripture.ref}</div>
@@ -165,7 +165,7 @@ function DailyMomentCard({ user, parish }) {
         >
           <span className="text-2xl shrink-0">{challenge.emoji}</span>
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">Today's nudge</div>
+            <div className="text-xs uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">Today's nudge</div>
             <div className="text-white/90 text-base font-semibold truncate">{challenge.text}</div>
           </div>
           <ChevronRight size={16} className="text-[var(--brand-accent)]/70 shrink-0 group-hover:translate-x-0.5 transition-transform" />
@@ -173,7 +173,7 @@ function DailyMomentCard({ user, parish }) {
 
         {/* Row 4: Parish label + quick-action icon row */}
         <div className="space-y-2 pt-1">
-          <div className="text-[11px] text-white/40 truncate">
+          <div className="text-xs text-white/40 truncate">
             {parish?.name || "My Parish"}{parish?.city ? ` · ${parish.city}` : ""}
           </div>
           <div className="grid grid-cols-5 gap-2">
@@ -189,8 +189,8 @@ function DailyMomentCard({ user, parish }) {
                 to={to}
                 className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-white/10 active:bg-white/25 text-white transition-colors"
               >
-                <Icon size={16} />
-                <span className="text-[11px] font-medium opacity-80">{label}</span>
+                <Icon size={18} />
+                <span className="text-xs font-semibold opacity-90">{label}</span>
               </Link>
             ))}
           </div>
@@ -441,11 +441,11 @@ function MeetBrethrenStrip({ parish, currentUserId }) {
                 <span>{(m.name || "?")[0].toUpperCase()}</span>
               )}
             </div>
-            <span className="text-[11px] text-[var(--text-secondary)] text-center leading-tight line-clamp-1 font-medium w-full truncate">
+            <span className="text-xs text-[var(--text-secondary)] text-center leading-tight line-clamp-1 font-medium w-full truncate">
               {m.name?.split(" ")[0]}
             </span>
             {m.ccc_rank && (
-              <span className="text-[11px] text-[var(--text-tertiary)] text-center leading-tight truncate w-full">
+              <span className="text-xs text-[var(--text-tertiary)] text-center leading-tight truncate w-full">
                 {m.ccc_rank}
               </span>
             )}
@@ -458,7 +458,7 @@ function MeetBrethrenStrip({ parish, currentUserId }) {
           <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-[var(--border-default)] grid place-items-center bg-[var(--bg-subtle)] hover:border-[var(--brand-accent)] transition-colors">
             <UserPlus size={20} className="text-[var(--text-tertiary)]" />
           </div>
-          <span className="text-[11px] text-[var(--brand-accent)] font-semibold text-center leading-tight">More →</span>
+          <span className="text-xs text-[var(--brand-accent)] font-semibold text-center leading-tight">More →</span>
         </Link>
       </div>
     </section>
@@ -558,7 +558,7 @@ function CpmStarsWidget() {
                   : <span className="text-3xl font-display text-white">{(s.member_name || "?")[0]}</span>}
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">
+                <div className="text-xs uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">
                   {s.period === "week" ? "⭐ Star of the Week" : "🌟 Star of the Month"}
                 </div>
                 <div className="text-sm font-semibold text-white leading-tight">{s.member_name}</div>
@@ -665,7 +665,7 @@ function GlobalPulseStrip() {
           <Link
             key={post.id}
             to="/app/feed"
-            className="shrink-0 snap-start w-64 card-surface p-4 flex flex-col gap-2.5 hover:border-[var(--brand-accent)] transition-colors group"
+            className="shrink-0 snap-start w-72 card-surface flex flex-col gap-3 p-4 group hover:border-[var(--brand-accent)] transition-colors"
           >
             {/* Header row */}
             <div className="flex items-center gap-2.5">
@@ -705,7 +705,7 @@ function GlobalPulseStrip() {
                 <Heart size={11} className="text-rose-400" />
                 {post.amen_count || post.reactions?.amen || 0} Amen
               </span>
-              <span className="text-[11px] text-[var(--brand-accent)] font-semibold group-hover:underline">
+              <span className="text-xs text-[var(--brand-accent)] font-semibold group-hover:underline">
                 Read more →
               </span>
             </div>
@@ -786,7 +786,7 @@ function UnifiedFeedPreview({ parishId }) {
       {/* Live indicator */}
       <div className="flex items-center gap-1.5 mb-3">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span className="text-[11px] text-[var(--text-tertiary)] uppercase tracking-wider">
+        <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">
           {activeTab === "parish" ? "Live from your parish" : "Live from CCC worldwide"}
         </span>
       </div>
@@ -818,7 +818,7 @@ function UnifiedFeedPreview({ parishId }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-[var(--brand-primary)] truncate">{post.user_name}</span>
                   {activeTab === "global" && post.parish_name && (
-                    <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-tertiary)] border border-[var(--border-default)] truncate max-w-[130px]">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-tertiary)] border border-[var(--border-default)] truncate max-w-[130px]">
                       📍 {post.parish_name}
                     </span>
                   )}
