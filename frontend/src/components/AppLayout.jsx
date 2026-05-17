@@ -308,10 +308,10 @@ export default function AppLayout({ children }) {
 
         {/* Mobile bottom nav bar */}
         <nav
-          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-paper)]/95 backdrop-blur-md border-t border-[var(--border-default)]"
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-paper)]/97 backdrop-blur-md border-t border-[var(--border-default)]"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 8px)" }}
         >
-          <div className="flex justify-around items-stretch h-16">
+          <div className="flex justify-around items-stretch h-[68px]">
             {BOTTOM_PRIMARY.map((n) => (
               <NavLink
                 key={n.to}
@@ -319,32 +319,34 @@ export default function AppLayout({ children }) {
                 end={n.end}
                 data-testid={`mobile-nav-${n.label.toLowerCase().replace(" ", "-")}`}
                 className={({ isActive }) =>
-                  `flex flex-col items-center justify-center gap-0.5 flex-1 transition-colors ${
+                  `flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${
                     isActive ? "text-[var(--brand-primary)]" : "text-[var(--text-tertiary)]"
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`w-10 h-7 rounded-xl flex items-center justify-center transition-all ${isActive ? "bg-[var(--brand-primary)]/10" : ""}`}>
-                      <n.icon size={21} strokeWidth={isActive ? 2.1 : 1.6} />
+                    <div className={`w-12 h-8 rounded-xl flex items-center justify-center transition-all ${
+                      isActive ? "bg-[var(--brand-primary)]/12" : ""
+                    }`}>
+                      <n.icon size={23} strokeWidth={isActive ? 2.2 : 1.6} />
                     </div>
-                    <span className="text-[10px] font-medium leading-none">{n.label}</span>
+                    <span className="text-[11px] font-semibold leading-none tracking-tight">{n.label}</span>
                   </>
                 )}
               </NavLink>
             ))}
 
-            {/* More / burger — visually distinct navy pill-tab */}
+            {/* More / burger */}
             <button
               onClick={() => setSheetOpen(true)}
               data-testid="mobile-nav-more"
-              className="flex flex-col items-center justify-center gap-0.5 flex-1 text-[var(--brand-primary)] active:opacity-70 transition-opacity"
+              className="flex flex-col items-center justify-center gap-1 flex-1 text-[var(--brand-primary)] active:opacity-70 transition-opacity"
             >
-              <div className="w-11 h-7 rounded-xl flex items-center justify-center bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/25">
-                <Menu size={18} strokeWidth={2} />
+              <div className="w-12 h-8 rounded-xl flex items-center justify-center bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <Menu size={20} strokeWidth={2} />
               </div>
-              <span className="text-[10px] font-bold leading-none">More</span>
+              <span className="text-[11px] font-bold leading-none tracking-tight">More</span>
             </button>
           </div>
         </nav>
@@ -358,7 +360,7 @@ export default function AppLayout({ children }) {
           onLogout={handleLogout}
         />
 
-        <main className="flex-1 px-4 md:px-8 py-6 md:py-8 pb-24 md:pb-8 fade-in">
+        <main className="flex-1 px-4 md:px-8 py-5 md:py-8 pb-28 md:pb-8 overflow-y-auto fade-in">
           {children}
         </main>
       </div>

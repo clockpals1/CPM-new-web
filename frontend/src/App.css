@@ -1,43 +1,87 @@
 /* App-specific styles for CelestialPeopleMeeet */
 .App { min-height: 100vh; }
 
+/* ── Touch: eliminate 300ms tap delay + grey flash on every touch ───────── */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+a, button, [role="button"], input, textarea, select, label {
+    touch-action: manipulation;
+}
+
+/* ── Buttons: 48px minimum touch target (Apple HIG + Material) ─────────── */
 .btn-primary {
     background: var(--brand-primary);
     color: white;
-    border-radius: 8px;
-    padding: 10px 22px;
-    font-weight: 500;
-    transition: background 200ms ease, transform 200ms ease;
+    border-radius: 12px;
+    padding: 13px 24px;
+    min-height: 48px;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 200ms ease, transform 150ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .btn-primary:hover { background: var(--brand-primary-hover); transform: translateY(-1px); }
+.btn-primary:active { transform: scale(0.97); }
 
 .btn-accent {
     background: var(--brand-accent);
     color: white;
-    border-radius: 8px;
-    padding: 10px 22px;
-    font-weight: 500;
-    transition: background 200ms ease, transform 200ms ease;
+    border-radius: 12px;
+    padding: 13px 24px;
+    min-height: 48px;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 200ms ease, transform 150ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .btn-accent:hover { background: var(--brand-accent-hover); }
+.btn-accent:active { transform: scale(0.97); }
 
+/* ── Cards: more native-app-like radius ─────────────────────────────────── */
 .card-surface {
     background: white;
     border: 1px solid var(--border-default);
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15,30,56,0.04);
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(15,30,56,0.05);
 }
 
 .divider { height: 1px; background: var(--border-default); }
 
+/* ── Inputs: MUST be 16px to prevent iOS auto-zoom on focus ─────────────── */
+input, textarea, select, .input-clean {
+    font-size: 16px !important;
+}
+
 .input-clean {
     background: white;
     border: 1px solid var(--border-default);
-    border-radius: 10px;
-    padding: 12px 14px;
+    border-radius: 12px;
+    padding: 13px 16px;
+    min-height: 48px;
     width: 100%;
     outline: none;
-    font: inherit;
+    font-family: inherit;
     transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 .input-clean:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(197,160,40,0.18); }
+
+/* ── Mobile: hide scrollbars, smooth iOS scroll ─────────────────────────── */
+@media (max-width: 768px) {
+    body { font-size: 16px; line-height: 1.55; }
+
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
+
+    /* iOS momentum scrolling for overflow containers */
+    .overflow-y-auto, .overflow-x-auto, main {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Slightly more breathing room on small screens */
+    .card-surface { border-radius: 18px; }
+}

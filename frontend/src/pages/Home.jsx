@@ -137,47 +137,46 @@ function DailyMomentCard({ user, parish }) {
         {/* Row 1: Greeting + streak */}
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.28em] text-[var(--brand-accent)] mb-1">{greeting}</div>
-            <h1 className="font-display text-[1.7rem] text-white leading-tight">{firstName}</h1>
-            <div className={`text-xs mt-0.5 ${occasion.color}`}>{occasion.label}</div>
+            <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-1 font-semibold">{greeting}</div>
+            <h1 className="font-display text-[2rem] text-white leading-tight">{firstName}</h1>
+            <div className={`text-sm mt-1 font-medium ${occasion.color}`}>{occasion.label}</div>
           </div>
-          <div className="shrink-0 flex flex-col items-center bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 rounded-2xl px-3 py-2 min-w-[52px]">
-            <Flame size={16} className="text-[var(--brand-accent)]" />
-            <span className="text-[var(--brand-accent)] font-display text-xl leading-none mt-0.5">{streak}</span>
-            <span className="text-[9px] text-white/40 uppercase tracking-wide">day{streak !== 1 ? "s" : ""}</span>
+          <div className="shrink-0 flex flex-col items-center bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 rounded-2xl px-4 py-3 min-w-[60px]">
+            <Flame size={18} className="text-[var(--brand-accent)]" />
+            <span className="text-[var(--brand-accent)] font-display text-2xl leading-none mt-0.5">{streak}</span>
+            <span className="text-[10px] text-white/50 uppercase tracking-wide mt-0.5">day{streak !== 1 ? "s" : ""}</span>
           </div>
         </div>
 
         {/* Row 2: Daily scripture */}
         <div className="bg-white/6 border border-white/10 rounded-xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
-            <BookOpen size={11} className="text-[var(--brand-accent)]" />
-            <span className="text-[9px] uppercase tracking-widest text-[var(--brand-accent)] font-semibold">Today's Scripture</span>
+            <BookOpen size={13} className="text-[var(--brand-accent)]" />
+            <span className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold">Today's Scripture</span>
           </div>
-          <p className="text-white/90 text-sm leading-relaxed italic">"{scripture.text}"</p>
-          <div className="text-[var(--brand-accent)] text-[11px] mt-2 font-semibold">— {scripture.ref}</div>
+          <p className="text-white/90 text-[15px] leading-relaxed italic">"{scripture.text}"</p>
+          <div className="text-[var(--brand-accent)] text-xs mt-2 font-bold">— {scripture.ref}</div>
         </div>
 
         {/* Row 3: Daily challenge pill */}
         <Link
           to={challenge.to}
-          className="flex items-center gap-3 bg-[var(--brand-accent)]/12 hover:bg-[var(--brand-accent)]/22 border border-[var(--brand-accent)]/25 rounded-xl px-4 py-2.5 transition-colors group"
+          className="flex items-center gap-3 bg-[var(--brand-accent)]/12 active:bg-[var(--brand-accent)]/25 border border-[var(--brand-accent)]/25 rounded-xl px-4 py-3 transition-colors group"
         >
-          <span className="text-xl shrink-0">{challenge.emoji}</span>
+          <span className="text-2xl shrink-0">{challenge.emoji}</span>
           <div className="flex-1 min-w-0">
-            <div className="text-[9px] uppercase tracking-widest text-[var(--brand-accent)] font-bold">Today's nudge</div>
-            <div className="text-white/85 text-sm truncate">{challenge.text}</div>
+            <div className="text-[11px] uppercase tracking-widest text-[var(--brand-accent)] font-bold mb-0.5">Today's nudge</div>
+            <div className="text-white/90 text-[15px] font-medium truncate">{challenge.text}</div>
           </div>
-          <ChevronRight size={14} className="text-[var(--brand-accent)]/60 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          <ChevronRight size={16} className="text-[var(--brand-accent)]/70 shrink-0 group-hover:translate-x-0.5 transition-transform" />
         </Link>
 
         {/* Row 4: Parish label + quick-action icon row */}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <div className="text-[10px] text-white/35 truncate max-w-[40%]">
-            {parish?.name || "My Parish"}
-            {parish?.city ? ` · ${parish.city}` : ""}
+        <div className="space-y-2 pt-1">
+          <div className="text-[11px] text-white/40 truncate">
+            {parish?.name || "My Parish"}{parish?.city ? ` · ${parish.city}` : ""}
           </div>
-          <div className="flex gap-1.5">
+          <div className="grid grid-cols-5 gap-2">
             {[
               { to: "/app/parish-feed", Icon: MessageCircle, label: "Feed" },
               { to: "/app/prayer",      Icon: Heart,         label: "Pray" },
@@ -188,10 +187,10 @@ function DailyMomentCard({ user, parish }) {
               <Link
                 key={to}
                 to={to}
-                className="flex flex-col items-center gap-0.5 w-10 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+                className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-white/10 active:bg-white/25 text-white transition-colors"
               >
-                <Icon size={13} />
-                <span className="text-[8px] opacity-60">{label}</span>
+                <Icon size={16} />
+                <span className="text-[10px] font-medium opacity-80">{label}</span>
               </Link>
             ))}
           </div>
