@@ -347,6 +347,13 @@ export default function ParishFeed() {
     try { await http.patch(`/posts/${pid}/pin`, { pinned }); setPosts(posts.map((p) => p.id === pid ? { ...p, pinned } : p).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at))); toast.success(pinned ? "Post pinned" : "Post unpinned"); } catch (e) { toast.error(formatErr(e)); }
   };
   const handleEdit = (pid, body) => setPosts(posts.map((p) => p.id === pid ? { ...p, body, edited_at: new Date().toISOString() } : p));
+  const handleShareGlobal = async (pid) => {
+    try {
+      await http.post(`/posts/${pid}/share-global`);
+      toast.success("Shared to Global Feed! Brethren worldwide can now see this.");
+      localStorage.setItem("cpm_posted_v1", "1");
+    } catch (e) { toast.error(formatErr(e)); }
+  };
 
   // Loading skeleton
   if (loading) {
@@ -443,13 +450,36 @@ export default function ParishFeed() {
           </div>
         )}
         {!loadingPosts && regularPosts.length === 0 && (
-          <div className="card-surface p-10 text-center space-y-3" data-testid="feed-empty">
-            <BookOpen size={24} className="mx-auto text-[var(--text-tertiary)]" />
-            <div className="font-display text-lg text-[var(--brand-primary)]">No posts yet</div>
-            <p className="text-sm text-[var(--text-secondary)] max-w-xs mx-auto">Be the first to share something with your parish community. Alleluia!</p>
+          <div className="card-surface overflow-hidden" data-testid="feed-empty">
+            <div className="h-1" style={{ background: "linear-gradient(90deg, var(--brand-primary), var(--brand-accent))" }} />
+            <div className="p-8 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--brand-accent)]/10 grid place-items-center mx-auto">
+                <MessageCircle size={24} className="text-[var(--brand-accent)]" />
+              </div>
+              <div>
+                <div className="font-display text-xl text-[var(--brand-primary)]">The feed is waiting for you</div>
+                <p className="text-sm text-[var(--text-secondary)] max-w-xs mx-auto mt-1 leading-relaxed">
+                  Be the first voice in your parish. Share a greeting, a scripture, or anything on your heart.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {[
+                  { label: "👋 Say hello", hint: "Introduce yourself" },
+                  { label: "📖 Share a scripture", hint: "Inspire the brethren" },
+                  { label: "🙏 Request prayer", hint: "Let us pray together" },
+                ].map((s) => (
+                  <button key={s.label}
+                    onClick={() => document.querySelector('[data-testid="feed-composer-input"]')?.focus()}
+                    className="px-4 py-2 rounded-full border border-[var(--border-default)] text-sm text-[var(--text-secondary)] hover:border-[var(--brand-accent)] hover:text-[var(--brand-primary)] transition-colors"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
-        {regularPosts.map((p) => <FeedCard key={p.id} post={p} user={user} onDelete={handleDelete} onPin={handlePin} onEdit={handleEdit} />)}
+        {regularPosts.map((p) => <FeedCard key={p.id} post={p} user={user} onDelete={handleDelete} onPin={handlePin} onEdit={handleEdit} onShareGlobal={handleShareGlobal} />)}
       </div>
 
       {/* Pending notice */}

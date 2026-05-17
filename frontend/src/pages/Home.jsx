@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   Church, Heart, Users, Calendar, MapPin, ArrowRight,
   Sparkles, Globe, Music, HandHelping, CheckCircle, ChevronRight, MessageCircle,
-  Play, Radio, CalendarClock,
+  Play, Radio, CalendarClock, X, Check, UserPlus,
 } from "lucide-react";
 
 // ── Skeleton loader ───────────────────────────────────────────────────────
@@ -15,6 +15,247 @@ function Skeleton() {
       <div className="h-52 rounded-2xl bg-[var(--bg-subtle)]" />
       <div className="grid md:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => <div key={i} className="h-36 rounded-2xl bg-[var(--bg-subtle)]" />)}
+      </div>
+    </div>
+  );
+}
+
+// ── Getting Started Checklist ─────────────────────────────────────────────
+function GettingStartedCard({ user, memberships }) {
+  const KEY = "cpm_onboarding_v1";
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem(KEY) === "done");
+
+  const steps = [
+    {
+      id: "parish",
+      label: "Join your parish",
+      sub: "Connect with your local Celestial family",
+      done: memberships.length > 0,
+      to: "/app/parishes",
+      cta: "Find parish",
+    },
+    {
+      id: "avatar",
+      label: "Add a profile photo",
+      sub: "Help brethren recognise you",
+      done: !!user?.avatar,
+      to: "/app/profile",
+      cta: "Add photo",
+    },
+    {
+      id: "prayer",
+      label: "Post a prayer request",
+      sub: "Let the community pray with you",
+      done: !!localStorage.getItem("cpm_prayed_v1"),
+      to: "/app/prayer",
+      cta: "Prayer wall",
+    },
+    {
+      id: "post",
+      label: "Share in your parish feed",
+      sub: "Say hello or share a thought",
+      done: !!localStorage.getItem("cpm_posted_v1"),
+      to: "/app/parish-feed",
+      cta: "Parish feed",
+    },
+    {
+      id: "testimony",
+      label: "Share a testimony",
+      sub: "Encourage brethren with your story",
+      done: !!localStorage.getItem("cpm_testified_v1"),
+      to: "/app/testimonies",
+      cta: "Testimonies",
+    },
+  ];
+
+  const doneCount = steps.filter((s) => s.done).length;
+  const pct = Math.round((doneCount / steps.length) * 100);
+
+  if (dismissed || doneCount === steps.length) return null;
+
+  return (
+    <div className="card-surface overflow-hidden" data-testid="getting-started-card">
+      <div className="h-1.5 bg-[var(--border-default)]">
+        <div
+          className="h-full transition-all duration-700 ease-out"
+          style={{ width: `${pct}%`, background: "linear-gradient(90deg, var(--brand-primary), var(--brand-accent))" }}
+        />
+      </div>
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-display text-xl text-[var(--brand-primary)]">Getting started</h3>
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
+              {doneCount}/{steps.length} steps &middot;{" "}
+              <span className="text-[var(--brand-accent)] font-semibold">{pct}% complete</span>
+            </p>
+          </div>
+          <button
+            onClick={() => { localStorage.setItem(KEY, "done"); setDismissed(true); }}
+            className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition-colors"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="space-y-1">
+          {steps.map((s) => (
+            <Link
+              key={s.id}
+              to={s.to}
+              className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+                s.done ? "opacity-50" : "hover:bg-[var(--bg-subtle)] active:bg-[var(--bg-subtle)]"
+              }`}
+            >
+              <div
+                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                  s.done ? "bg-emerald-500 border-emerald-500" : "border-[var(--border-default)]"
+                }`}
+              >
+                {s.done && <Check size={12} className="text-white" strokeWidth={2.5} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div
+                  className={`text-sm font-medium leading-tight ${
+                    s.done ? "line-through text-[var(--text-tertiary)]" : "text-[var(--text-primary)]"
+                  }`}
+                >
+                  {s.label}
+                </div>
+                {!s.done && (
+                  <div className="text-xs text-[var(--text-tertiary)] leading-tight mt-0.5">{s.sub}</div>
+                )}
+              </div>
+              {!s.done && (
+                <span className="text-xs font-semibold text-[var(--brand-accent)] shrink-0 whitespace-nowrap">
+                  {s.cta} →
+                </span>
+              )}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Meet Your Brethren Strip ──────────────────────────────────────────────
+function MeetBrethrenStrip({ parish, currentUserId }) {
+  const [members, setMembers] = useState([]);
+  useEffect(() => {
+    if (!parish?.country) return;
+    http
+      .get("/members", { params: { country: parish.country, limit: 20 } })
+      .then((r) => setMembers(r.data.filter((m) => m.id !== currentUserId).slice(0, 12)))
+      .catch(() => {});
+  }, [parish, currentUserId]);
+
+  if (members.length === 0) return null;
+
+  return (
+    <section data-testid="meet-brethren-strip">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="font-display text-xl text-[var(--brand-primary)]">Brethren in your region</h2>
+          <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Members from {parish.country}</p>
+        </div>
+        <Link
+          to="/app/meet"
+          className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0"
+        >
+          See all <ArrowRight size={13} />
+        </Link>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x snap-mandatory">
+        {members.map((m) => (
+          <Link
+            key={m.id}
+            to="/app/meet"
+            className="flex flex-col items-center gap-1.5 shrink-0 snap-start w-[72px] group"
+          >
+            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-xl font-display ring-2 ring-[var(--bg-paper)] group-hover:ring-[var(--brand-accent)] transition-all shadow-sm">
+              {m.avatar ? (
+                <img src={m.avatar} alt={m.name} className="w-full h-full object-cover" />
+              ) : (
+                <span>{(m.name || "?")[0].toUpperCase()}</span>
+              )}
+            </div>
+            <span className="text-[11px] text-[var(--text-secondary)] text-center leading-tight line-clamp-1 font-medium w-full truncate">
+              {m.name?.split(" ")[0]}
+            </span>
+            {m.ccc_rank && (
+              <span className="text-[9px] text-[var(--text-tertiary)] text-center leading-tight truncate w-full">
+                {m.ccc_rank}
+              </span>
+            )}
+          </Link>
+        ))}
+        <Link
+          to="/app/meet"
+          className="flex flex-col items-center justify-center gap-1.5 shrink-0 snap-start w-[72px]"
+        >
+          <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-[var(--border-default)] grid place-items-center bg-[var(--bg-subtle)] hover:border-[var(--brand-accent)] transition-colors">
+            <UserPlus size={20} className="text-[var(--text-tertiary)]" />
+          </div>
+          <span className="text-[11px] text-[var(--brand-accent)] font-semibold text-center leading-tight">More →</span>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+// ── Introduce Yourself Banner ─────────────────────────────────────────────
+function IntroduceYourselfBanner({ parish }) {
+  const KEY = "cpm_intro_v1";
+  const [show, setShow] = useState(() => !localStorage.getItem(KEY));
+  const dismiss = () => { localStorage.setItem(KEY, "1"); setShow(false); };
+  if (!show || !parish?.name) return null;
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-[var(--brand-accent)]/30 p-5"
+      style={{ background: "linear-gradient(135deg, rgba(197,160,40,0.08) 0%, rgba(197,160,40,0.03) 100%)" }}
+      data-testid="introduce-yourself-banner"
+    >
+      <div
+        className="absolute -top-5 -right-5 w-28 h-28 rounded-full opacity-20 pointer-events-none"
+        style={{ background: "radial-gradient(circle, var(--brand-accent), transparent)" }}
+      />
+      <button
+        onClick={dismiss}
+        className="absolute top-3 right-3 p-1 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+        aria-label="Dismiss"
+      >
+        <X size={14} />
+      </button>
+      <div className="flex items-start gap-3 pr-6">
+        <div className="w-11 h-11 rounded-xl bg-[var(--brand-accent)]/15 grid place-items-center shrink-0 mt-0.5">
+          <Sparkles size={20} className="text-[var(--brand-accent)]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-[var(--brand-primary)] leading-snug">
+            Say hello to{" "}
+            <span className="text-[var(--brand-accent)]">{parish.name}</span>!
+          </div>
+          <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
+            Your brethren would love to know you. Post a quick introduction in the parish feed — it only takes a moment.
+          </p>
+          <div className="flex items-center gap-3 mt-3">
+            <Link
+              to="/app/parish-feed"
+              onClick={dismiss}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--brand-primary)] text-white text-xs font-semibold hover:bg-[var(--brand-primary)]/90 transition-colors"
+            >
+              <MessageCircle size={12} /> Say Hello 👋
+            </Link>
+            <button
+              onClick={dismiss}
+              className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -282,6 +523,12 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
         </div>
       </div>
 
+      {/* Introduce Yourself Banner — shown once to new members */}
+      <IntroduceYourselfBanner parish={p} />
+
+      {/* Getting Started checklist */}
+      <GettingStartedCard user={user} memberships={memberships} />
+
       {/* Parish switcher for 2 parishes */}
       {memberships.length > 1 && (
         <div className="card-surface p-5" data-testid="parish-switcher">
@@ -313,6 +560,9 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
 
       {/* Engagement rail */}
       <EngagementRail />
+
+      {/* Meet Brethren — horizontal scroll of members from same country */}
+      <MeetBrethrenStrip parish={p} currentUserId={user?.id} />
 
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

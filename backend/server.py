@@ -1047,6 +1047,45 @@ async def pin_post(pid: str, body: dict, user: dict = Depends(require_roles("sup
     return {"ok": True, "pinned": pinned}
 
 
+@api.post("/posts/{pid}/share-global")
+async def share_post_global(pid: str, user: dict = Depends(get_current_user)):
+    """Share a parish post to the global feed, with attribution to original author and parish."""
+    original = await db.feed_posts.find_one({"id": pid}, {"_id": 0})
+    if not original:
+        raise HTTPException(404, "Post not found")
+    if original.get("scope") == "global":
+        raise HTTPException(400, "This post is already on the global feed")
+    existing = await db.feed_posts.find_one({"shared_from_id": pid, "user_id": user["id"]})
+    if existing:
+        raise HTTPException(400, "You have already shared this post to the global feed")
+    parish_name = None
+    if original.get("parish_id"):
+        par = await db.parishes.find_one({"id": original["parish_id"]}, {"name": 1})
+        if par:
+            parish_name = par.get("name")
+    doc = {
+        "id": new_id(),
+        "scope": "global",
+        "body": original.get("body", ""),
+        "image_url": original.get("image_url"),
+        "media_urls": original.get("media_urls", []),
+        "post_type": original.get("post_type", "member_post"),
+        "user_id": user["id"],
+        "user_name": user.get("name", ""),
+        "user_avatar": user.get("avatar", ""),
+        "user_rank": user.get("ccc_rank", ""),
+        "reactions": {},
+        "comment_count": 0,
+        "created_at": iso(now_utc()),
+        "shared_from_id": pid,
+        "shared_from_user_name": original.get("user_name", ""),
+        "shared_from_parish_name": parish_name,
+    }
+    await db.feed_posts.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
 @api.post("/posts/{pid}/react")
 async def react_post(pid: str, body: dict, user: dict = Depends(get_current_user)):
     reaction = body.get("reaction", "amen")

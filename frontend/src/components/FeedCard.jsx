@@ -3,7 +3,7 @@ import { http, formatErr } from "../lib/api";
 import {
   Heart, MessageCircle, ChevronDown, Flag, Pin, Pencil, Trash2,
   Loader2, Send, ExternalLink, Music2, BookOpen, Flame, HandHelping,
-  Cross, Play,
+  Cross, Play, Share2, Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -109,7 +109,7 @@ function CommentThread({ postId, user }) {
 }
 
 // ── Main FeedCard ─────────────────────────────────────────────────────────────
-export default function FeedCard({ post, user, onDelete, onPin, onEdit }) {
+export default function FeedCard({ post, user, onDelete, onPin, onEdit, onShareGlobal }) {
   const [showComments, setShowComments] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -281,6 +281,15 @@ export default function FeedCard({ post, user, onDelete, onPin, onEdit }) {
           </a>
         )}
 
+        {/* Shared-from attribution */}
+        {post.shared_from_user_name && (
+          <div className="flex items-center gap-1.5 mt-2 text-[10px] text-[var(--text-tertiary)] border-t border-[var(--border-default)] pt-2">
+            <Share2 size={10} />
+            <span>Shared from <span className="font-medium text-[var(--text-secondary)]">{post.shared_from_user_name}</span></span>
+            {post.shared_from_parish_name && <span>· {post.shared_from_parish_name}</span>}
+          </div>
+        )}
+
         {/* Reactions + comments toggle */}
         <div className="flex items-center gap-4 mt-3 text-xs text-[var(--text-tertiary)]">
           <button onClick={() => react("amen")}
@@ -303,6 +312,16 @@ export default function FeedCard({ post, user, onDelete, onPin, onEdit }) {
             {post.comment_count || 0}
             <ChevronDown size={11} className={`transition-transform ${showComments ? "rotate-180" : ""}`} />
           </button>
+          {onShareGlobal && post.scope === "parish" && !post.shared_from_id && (
+            <button
+              onClick={() => onShareGlobal(post.id)}
+              className="inline-flex items-center gap-1.5 hover:text-emerald-600 transition-colors ml-auto"
+              title="Share to Global Feed"
+              data-testid={`share-global-${post.id}`}
+            >
+              <Globe size={13} /> <span className="hidden sm:inline">Share globally</span>
+            </button>
+          )}
         </div>
 
         {showComments && <CommentThread postId={post.id} user={user} />}
