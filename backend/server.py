@@ -504,7 +504,7 @@ async def list_parishes(
     if status:
         flt["status"] = status
     else:
-        flt["status"] = "active"  # default: active parishes only
+        flt["status"] = {"$in": ["active", "pending_review"]}  # include user-contributed parishes awaiting review
     if q:
         flt["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
@@ -543,6 +543,89 @@ async def nearby_parishes(country: Optional[str] = None, city: Optional[str] = N
             if len(out) >= limit:
                 break
     return out[:limit]
+
+
+@api.post("/parishes/lookup-or-create")
+async def parish_lookup_or_create(body: dict):
+    """
+    Public onboarding endpoint — no auth required.
+    1. Fuzzy-searches for existing parishes matching name + country.
+    2. If similar found AND force_create=False → returns {created:false, matches:[...]}.
+    3. If force_create=True OR no matches → creates parish with status='pending_review'
+       and returns {created:true, parish:{...}, matches:[]}.
+    """
+    import re as _re
+    name    = (body.get("name") or "").strip()
+    city    = (body.get("city") or "").strip()
+    country = (body.get("country") or "").strip()
+    if not name:
+        raise HTTPException(400, "Parish name is required")
+
+    # Build fuzzy name key — strip noise words for a broader regex hit
+    noise = {"celestial", "church", "of", "christ", "ccc", "parish", "the", "and", "&"}
+    tokens = [t for t in _re.sub(r"[^\w\s]", "", name.lower()).split() if t not in noise]
+    name_key = " ".join(tokens[:3])  # up to 3 meaningful tokens
+
+    flt: dict = {}
+    if name_key:
+        flt["name"] = {"$regex": _re.escape(name_key) if not tokens else "|".join(_re.escape(t) for t in tokens[:4]), "$options": "i"}
+    if country:
+        flt["country"] = {"$regex": f"^{_re.escape(country)}$", "$options": "i"}
+
+    similar = []
+    if flt.get("name"):
+        raw = await db.parishes.find(flt, {"_id": 0}).limit(6).to_list(6)
+        # Score by how many search tokens appear in the name
+        def score(p):
+            n = p.get("name", "").lower()
+            return sum(1 for t in tokens if t in n)
+        similar = sorted([p for p in raw if score(p) > 0], key=score, reverse=True)[:4]
+
+    force_create = bool(body.get("force_create"))
+
+    if similar and not force_create:
+        return {"created": False, "matches": similar, "parish": None}
+
+    # ── Create new parish ──────────────────────────────────────────────
+    doc = {
+        "id":                  new_id(),
+        "name":                name,
+        "city":                city,
+        "country":             country,
+        "state":               body.get("state") or "",
+        "address":             body.get("address") or "",
+        "shepherd_name":       body.get("shepherd_name") or "",
+        "phone":               body.get("phone") or "",
+        "website":             "",
+        "service_times":       "",
+        "livestream_url":      "",
+        "description":         "",
+        "image_url":           "",
+        "status":              "pending_review",   # admin must verify before going live
+        "join_mode":           "request_only",
+        "choir_enabled":       True,
+        "ministries_enabled":  True,
+        "source":              "user_onboarding",
+        "contributed_by_name": body.get("contributed_by") or "",
+        "member_count":        0,
+        "lat":                 None,
+        "lng":                 None,
+        "created_at":          iso(now_utc()),
+    }
+    await db.parishes.insert_one(doc)
+    doc.pop("_id", None)
+
+    await db.audit_logs.insert_one({
+        "id": new_id(),
+        "actor_id":    "onboarding",
+        "actor_name":  body.get("contributed_by") or "new user",
+        "action":      "parish_created_via_onboarding",
+        "target":      doc["id"],
+        "details":     {"parish_name": name, "city": city, "country": country},
+        "created_at":  iso(now_utc()),
+    })
+
+    return {"created": True, "matches": [], "parish": doc}
 
 
 @api.get("/parishes/{pid}")

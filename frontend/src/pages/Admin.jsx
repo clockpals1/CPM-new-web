@@ -94,19 +94,33 @@ function ParishForm({ value, onChange }) {
 
 function ParishesManager() {
   const [list, setList] = useState([]);
+  const [allList, setAllList] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [form, setForm] = useState(BLANK_PARISH);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [stats, setStats] = useState({});
   const [creating, setCreating] = useState(false);
 
-  const load = () => http.get("/parishes", { params: { status: undefined } }).then((r) => {
-    setList(r.data);
-    r.data.forEach((p) => {
-      http.get(`/parishes/${p.id}/stats`).then((s) => setStats((prev) => ({ ...prev, [p.id]: s.data }))).catch(() => {});
+  const load = () => {
+    http.get("/parishes", { params: { limit: 500 } }).then((r) => {
+      setAllList(r.data);
+      r.data.forEach((p) => {
+        http.get(`/parishes/${p.id}/stats`).then((s) => setStats((prev) => ({ ...prev, [p.id]: s.data }))).catch(() => {});
+      });
     });
-  });
+  };
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (statusFilter === "all") {
+      setList(allList);
+    } else {
+      setList(allList.filter((p) => p.status === statusFilter));
+    }
+  }, [allList, statusFilter]);
+
+  const pendingCount = allList.filter((p) => p.status === "pending_review").length;
 
   const create = async () => {
     if (!form.name || !form.country || !form.city) return toast.error("Name, country, and city are required.");
@@ -124,6 +138,10 @@ function ParishesManager() {
     } catch (e) { toast.error(formatErr(e)); }
   };
 
+  const approve = async (p) => {
+    try { await http.patch(`/parishes/${p.id}`, { status: "active" }); toast.success(`"${p.name}" is now active`); load(); } catch (e) { toast.error(formatErr(e)); }
+  };
+
   const toggleStatus = async (p) => {
     const next = p.status === "active" ? "inactive" : "active";
     try { await http.patch(`/parishes/${p.id}`, { status: next }); toast.success(`Parish ${next}`); load(); } catch (e) { toast.error(formatErr(e)); }
@@ -134,8 +152,39 @@ function ParishesManager() {
     try { await http.delete(`/parishes/${pid}`); toast.success("Deleted"); load(); } catch (e) { toast.error(formatErr(e)); }
   };
 
+  const STATUS_FILTERS = [
+    { k: "all",            label: "All" },
+    { k: "active",         label: "Active" },
+    { k: "pending_review", label: "Pending Review" },
+    { k: "inactive",       label: "Inactive" },
+  ];
+
+  const STATUS_COLOR = {
+    active:         "bg-emerald-50 text-emerald-700 border-emerald-200",
+    pending_review: "bg-amber-50 text-amber-700 border-amber-200",
+    inactive:       "bg-gray-100 text-gray-600 border-gray-200",
+  };
+
   return (
     <div className="space-y-6">
+      {/* Pending review alert */}
+      {pendingCount > 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+          <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-amber-800">
+              {pendingCount} parish{pendingCount !== 1 ? "es" : ""} awaiting review
+            </div>
+            <div className="text-xs text-amber-700 mt-0.5">
+              These were submitted by users during sign-up. Review and activate or delete them.
+            </div>
+          </div>
+          <button onClick={() => setStatusFilter("pending_review")} className="text-xs px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 shrink-0">
+            Review now
+          </button>
+        </div>
+      )}
+
       {/* Create form */}
       <div className="card-surface p-5">
         <h3 className="font-display text-xl text-[var(--brand-primary)] mb-4 flex items-center gap-2"><Plus size={16} /> Create new parish</h3>
@@ -149,9 +198,28 @@ function ParishesManager() {
 
       {/* Parish list */}
       <div className="space-y-3">
-        <div className="text-sm text-[var(--text-tertiary)] font-medium">All parishes ({list.length})</div>
+        {/* Filter tabs */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {STATUS_FILTERS.map((f) => (
+            <button key={f.k} onClick={() => setStatusFilter(f.k)}
+              className={`px-3 py-1.5 rounded-md border text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                statusFilter === f.k ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)] text-[var(--text-secondary)]"
+              }`}
+              data-testid={`parish-filter-${f.k}`}
+            >
+              {f.label}
+              {f.k === "pending_review" && pendingCount > 0 && (
+                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${statusFilter === f.k ? "bg-white text-amber-700" : "bg-amber-500 text-white"}`}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
+          <span className="text-xs text-[var(--text-tertiary)] ml-auto">{list.length} shown</span>
+        </div>
+
         {list.map((p) => (
-          <div key={p.id} className="card-surface" data-testid={`admin-parish-${p.id}`}>
+          <div key={p.id} className={`card-surface ${p.status === "pending_review" ? "border-l-4 border-l-amber-400" : ""}`} data-testid={`admin-parish-${p.id}`}>
             {editing === p.id ? (
               <div className="p-5 space-y-4">
                 <ParishForm value={editForm} onChange={setEditForm} />
@@ -165,25 +233,40 @@ function ParishesManager() {
                 <div className="flex-1 min-w-[200px]">
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="font-medium text-[var(--brand-primary)]">{p.name}</div>
-                    <span className={`text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border font-semibold ${p.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{p.status}</span>
-                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase">{p.join_mode?.replace("_", " ")}</span>
+                    <span className={`text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border font-semibold ${STATUS_COLOR[p.status] || STATUS_COLOR.inactive}`}>
+                      {p.status === "pending_review" ? "Pending Review" : p.status}
+                    </span>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase">{p.join_mode?.replace(/_/g, " ")}</span>
+                    {p.source === "user_onboarding" && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 font-semibold">User submitted</span>
+                    )}
                   </div>
                   <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{[p.city, p.state, p.country].filter(Boolean).join(", ")}</div>
                   {p.shepherd_name && <div className="text-xs text-[var(--text-secondary)] mt-0.5">Shepherd: {p.shepherd_name}</div>}
-                  {stats[p.id] && <div className="text-xs text-[var(--brand-accent)] mt-1">{stats[p.id].member_count} member{stats[p.id].member_count !== 1 ? "s" : ""} • {stats[p.id].pending_count} pending</div>}
+                  {p.contributed_by_name && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">Submitted by: {p.contributed_by_name}</div>}
+                  {p.phone && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">Phone: {p.phone}</div>}
+                  {p.address && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{p.address}</div>}
+                  {stats[p.id] && <div className="text-xs text-[var(--brand-accent)] mt-1">{stats[p.id].member_count} member{stats[p.id].member_count !== 1 ? "s" : ""} {stats[p.id].pending_count > 0 ? `• ${stats[p.id].pending_count} pending` : ""}</div>}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {p.status === "pending_review" && (
+                    <button onClick={() => approve(p)} className="text-xs px-3 py-1.5 rounded-md border border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold inline-flex items-center gap-1" data-testid={`approve-parish-${p.id}`}>
+                      <CheckCircle size={12} /> Approve
+                    </button>
+                  )}
                   <button onClick={() => { setEditing(p.id); setEditForm({ ...BLANK_PARISH, ...p, lat: p.lat ?? "", lng: p.lng ?? "" }); }} className="text-xs px-3 py-1.5 rounded-md border border-[var(--border-default)] hover:border-[var(--brand-primary)]" data-testid={`edit-parish-${p.id}`}>Edit</button>
-                  <button onClick={() => toggleStatus(p)} className={`text-xs px-3 py-1.5 rounded-md border ${p.status === "active" ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`} data-testid={`toggle-parish-${p.id}`}>
-                    {p.status === "active" ? "Deactivate" : "Activate"}
-                  </button>
+                  {p.status !== "pending_review" && (
+                    <button onClick={() => toggleStatus(p)} className={`text-xs px-3 py-1.5 rounded-md border ${p.status === "active" ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`} data-testid={`toggle-parish-${p.id}`}>
+                      {p.status === "active" ? "Deactivate" : "Activate"}
+                    </button>
+                  )}
                   <button onClick={() => remove(p.id, p.name)} className="text-xs px-3 py-1.5 rounded-md border border-red-200 text-red-700 hover:bg-red-50" data-testid={`delete-parish-${p.id}`}><Trash2 size={12} /></button>
                 </div>
               </div>
             )}
           </div>
         ))}
-        {list.length === 0 && <div className="card-surface p-6 text-sm text-[var(--text-secondary)] text-center">No parishes yet. Create the first one above.</div>}
+        {list.length === 0 && <div className="card-surface p-6 text-sm text-[var(--text-secondary)] text-center">No parishes in this category.</div>}
       </div>
     </div>
   );
@@ -1610,11 +1693,19 @@ function CPMWaveManager() {
 
 export default function Admin() {
   const [tab, setTab] = useState("settings");
+  const [pendingParishCount, setPendingParishCount] = useState(0);
+
+  useEffect(() => {
+    http.get("/parishes", { params: { limit: 500 } })
+      .then((r) => setPendingParishCount(r.data.filter((p) => p.status === "pending_review").length))
+      .catch(() => {});
+  }, []);
+
   const TABS = [
     { k: "settings",       l: "Settings & Catalog",        icon: BadgeCheck },
     { k: "parish-import",  l: "Parish Import",             icon: Upload },
     { k: "ranks-import",   l: "Ranks & Catalogs Import",   icon: Download },
-    { k: "parishes",       l: "Parishes",                  icon: Plus },
+    { k: "parishes",       l: "Parishes",                  icon: Plus,     badge: pendingParishCount },
     { k: "approvals",      l: "Approvals",                 icon: BadgeCheck },
     { k: "parish-admin-requests", l: "Parish Admin Requests", icon: UserCog },
     { k: "users",          l: "Users & Roles",             icon: Shield },
@@ -1642,6 +1733,11 @@ export default function Admin() {
         {TABS.map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)} data-testid={`admin-tab-${t.k}`} className={`px-4 py-2 rounded-md border text-sm inline-flex items-center gap-2 ${tab === t.k ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-[var(--border-default)]"}`}>
             <t.icon size={14} /> {t.l}
+            {t.badge > 0 && (
+              <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold ${tab === t.k ? "bg-amber-400 text-[var(--brand-primary)]" : "bg-amber-500 text-white"}`}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
