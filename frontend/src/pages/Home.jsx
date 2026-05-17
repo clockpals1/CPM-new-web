@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { http } from "../lib/api";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -6,6 +6,7 @@ import {
   Church, Heart, Users, Calendar, MapPin, ArrowRight,
   Sparkles, Globe, Music, HandHelping, CheckCircle, ChevronRight, MessageCircle,
   Play, Radio, CalendarClock, X, Check, UserPlus, Crown, Trophy, Star,
+  Flame, BookOpen, Zap,
 } from "lucide-react";
 
 // ── Skeleton loader ───────────────────────────────────────────────────────
@@ -17,6 +18,267 @@ function Skeleton() {
         {[1, 2, 3].map((i) => <div key={i} className="h-36 rounded-2xl bg-[var(--bg-subtle)]" />)}
       </div>
     </div>
+  );
+}
+
+// ── Daily content data ────────────────────────────────────────────────────
+const SCRIPTURES = [
+  { ref: "Psalm 46:1",       text: "God is our refuge and strength, a very present help in trouble." },
+  { ref: "Isaiah 40:31",     text: "They that wait upon the Lord shall renew their strength; they shall mount up with wings as eagles." },
+  { ref: "John 3:16",        text: "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life." },
+  { ref: "Philippians 4:13", text: "I can do all things through Christ which strengtheneth me." },
+  { ref: "Proverbs 3:5-6",   text: "Trust in the Lord with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths." },
+  { ref: "Romans 8:28",      text: "And we know that all things work together for good to them that love God, to them who are the called according to his purpose." },
+  { ref: "Jeremiah 29:11",   text: "For I know the thoughts that I think toward you, saith the Lord, thoughts of peace, and not of evil, to give you an expected end." },
+  { ref: "Psalm 23:1",       text: "The Lord is my shepherd; I shall not want." },
+  { ref: "Matthew 6:33",     text: "But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you." },
+  { ref: "Psalm 121:2",      text: "My help cometh from the Lord, which made heaven and earth." },
+  { ref: "2 Chronicles 7:14",text: "If my people, which are called by my name, shall humble themselves, and pray, and seek my face, and turn from their wicked ways; then will I hear from heaven." },
+  { ref: "Isaiah 41:10",     text: "Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee." },
+  { ref: "Psalm 34:18",      text: "The Lord is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit." },
+  { ref: "Matthew 11:28",    text: "Come unto me, all ye that labour and are heavy laden, and I will give you rest." },
+  { ref: "Psalm 91:1",       text: "He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty." },
+  { ref: "Joshua 1:9",       text: "Be strong and of a good courage; be not afraid, neither be thou dismayed: for the Lord thy God is with thee whithersoever thou goest." },
+  { ref: "Revelation 21:4",  text: "And God shall wipe away all tears from their eyes; and there shall be no more death, neither sorrow, nor crying, neither shall there be any more pain." },
+  { ref: "Hebrews 11:1",     text: "Now faith is the substance of things hoped for, the evidence of things not seen." },
+  { ref: "1 John 4:4",       text: "Ye are of God, little children, and have overcome them: because greater is he that is in you, than he that is in the world." },
+  { ref: "Psalm 37:4",       text: "Delight thyself also in the Lord: and he shall give thee the desires of thine heart." },
+  { ref: "Romans 8:1",       text: "There is therefore now no condemnation to them which are in Christ Jesus, who walk not after the flesh, but after the Spirit." },
+  { ref: "Lamentations 3:22-23", text: "It is of the Lord's mercies that we are not consumed, because his compassions fail not. They are new every morning: great is thy faithfulness." },
+  { ref: "Psalm 27:1",       text: "The Lord is my light and my salvation; whom shall I fear? the Lord is the strength of my life; of whom shall I be afraid?" },
+  { ref: "Philippians 4:6-7",text: "Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God." },
+  { ref: "Galatians 5:22-23",text: "But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith, meekness, temperance." },
+  { ref: "Isaiah 26:3",      text: "Thou wilt keep him in perfect peace, whose mind is stayed on thee: because he trusteth in thee." },
+  { ref: "Psalm 103:1",      text: "Bless the Lord, O my soul: and all that is within me, bless his holy name." },
+  { ref: "John 16:33",       text: "These things I have spoken unto you, that in me ye might have peace. In the world ye shall have tribulation: but be of good cheer; I have overcome the world." },
+  { ref: "1 Peter 5:7",      text: "Casting all your care upon him; for he careth for you." },
+  { ref: "Deuteronomy 31:6", text: "Be strong and of a good courage, fear not, nor be afraid of them: for the Lord thy God, he it is that doth go with thee; he will not fail thee, nor forsake thee." },
+  { ref: "James 1:5",        text: "If any of you lack wisdom, let him ask of God, that giveth to all men liberally, and upbraideth not; and it shall be given him." },
+  { ref: "Psalm 46:10",      text: "Be still, and know that I am God: I will be exalted among the heathen, I will be exalted in the earth." },
+  { ref: "2 Corinthians 5:17",text: "Therefore if any man be in Christ, he is a new creature: old things are passed away; behold, all things are become new." },
+  { ref: "Ezekiel 36:26",    text: "A new heart also will I give you, and a new spirit will I put within you: and I will take away the stony heart out of your flesh." },
+  { ref: "Proverbs 18:10",   text: "The name of the Lord is a strong tower: the righteous runneth into it, and is safe." },
+  { ref: "Matthew 5:16",     text: "Let your light so shine before men, that they may see your good works, and glorify your Father which is in heaven." },
+  { ref: "Psalm 150:6",      text: "Let every thing that hath breath praise the Lord. Praise ye the Lord." },
+  { ref: "Acts 1:8",         text: "But ye shall receive power, after that the Holy Ghost is come upon you: and ye shall be witnesses unto me." },
+  { ref: "Isaiah 55:11",     text: "So shall my word be that goeth forth out of my mouth: it shall not return unto me void, but it shall accomplish that which I please." },
+  { ref: "Romans 10:17",     text: "So then faith cometh by hearing, and hearing by the word of God." },
+  { ref: "Psalm 133:1",      text: "Behold, how good and how pleasant it is for brethren to dwell together in unity!" },
+  { ref: "Hebrews 10:25",    text: "Not forsaking the assembling of ourselves together, as the manner of some is; but exhorting one another: and so much the more, as ye see the day approaching." },
+  { ref: "1 Thessalonians 5:17", text: "Pray without ceasing." },
+  { ref: "Colossians 3:16",  text: "Let the word of Christ dwell in you richly in all wisdom; teaching and admonishing one another in psalms and hymns and spiritual songs, singing with grace in your hearts to the Lord." },
+  { ref: "Ephesians 6:18",   text: "Praying always with all prayer and supplication in the Spirit, and watching thereunto with all perseverance and supplication for all saints." },
+  { ref: "Malachi 3:10",     text: "Prove me now herewith, saith the Lord of hosts, if I will not open you the windows of heaven, and pour you out a blessing, that there shall not be room enough to receive it." },
+  { ref: "Psalm 118:24",     text: "This is the day which the Lord hath made; we will rejoice and be glad in it." },
+];
+
+const DAY_OCCASIONS = [
+  { label: "Sabbath day of the Lord ✝️", color: "text-amber-300" },        // Sunday
+  { label: "New week — God goes before you 🌅", color: "text-blue-300" },   // Monday
+  { label: "Press forward in His grace 🙏", color: "text-purple-300" },     // Tuesday
+  { label: "Mid-week — renew your strength 💪", color: "text-emerald-300" },// Wednesday
+  { label: "Give thanks in all things 🌿", color: "text-teal-300" },        // Thursday
+  { label: "Preparation and reflection ✨", color: "text-rose-300" },       // Friday
+  { label: "Rest and prepare your heart 🕊️", color: "text-indigo-300" },   // Saturday
+];
+
+const DAILY_CHALLENGES = [
+  { emoji: "🙏", text: "Pray for 2 brethren today",            to: "/app/prayer",       cta: "Go to Prayer Wall" },
+  { emoji: "📖", text: "Share a scripture in your feed",        to: "/app/parish-feed",  cta: "Open Parish Feed" },
+  { emoji: "❤️", text: "Say Amen on 3 prayer requests",         to: "/app/prayer",       cta: "Visit Prayer Wall" },
+  { emoji: "💬", text: "Encourage a fellow parishioner",         to: "/app/messages",     cta: "Send a Message" },
+  { emoji: "✨", text: "Share a testimony of God's goodness",   to: "/app/testimonies",  cta: "Post Testimony" },
+  { emoji: "📣", text: "Invite a family member to join CPM",    to: "/app/meet",         cta: "Find Brethren" },
+  { emoji: "🎵", text: "Listen to a CCC hymn today",            to: "/app/music",        cta: "Open CPM Wave" },
+];
+
+// ── Daily Moment Card — personal, fresh every day ─────────────────────────
+function DailyMomentCard({ user, parish }) {
+  const streak = useMemo(() => {
+    const today = new Date().toDateString();
+    const last = localStorage.getItem("cpm_last_visit");
+    const s = parseInt(localStorage.getItem("cpm_streak_v1") || "0");
+    if (last === today) return Math.max(s, 1);
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    const ns = last === yesterday ? s + 1 : 1;
+    localStorage.setItem("cpm_last_visit", today);
+    localStorage.setItem("cpm_streak_v1", String(ns));
+    return ns;
+  }, []);
+
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? "Still watching? 🌙" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = (user?.name || "Beloved").split(" ")[0];
+
+  const dayOfWeek = new Date().getDay();
+  const occasion = DAY_OCCASIONS[dayOfWeek];
+
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  const scripture = SCRIPTURES[dayOfYear % SCRIPTURES.length];
+  const challenge = DAILY_CHALLENGES[dayOfWeek];
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl"
+      style={{ background: "linear-gradient(135deg, #0F1E38 0%, #1a3060 100%)" }}
+      data-testid="daily-moment-card"
+    >
+      {/* Ambient glow */}
+      <div
+        className="absolute -top-16 -right-16 w-64 h-64 opacity-15 pointer-events-none rounded-full"
+        style={{ background: "radial-gradient(circle, #C5A028, transparent)" }}
+      />
+      <div
+        className="absolute -bottom-20 -left-20 w-56 h-56 opacity-8 pointer-events-none rounded-full"
+        style={{ background: "radial-gradient(circle, #4F6BB0, transparent)" }}
+      />
+
+      <div className="relative px-6 py-6 md:px-8 md:py-7 space-y-4">
+        {/* Row 1: Greeting + streak */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.28em] text-[var(--brand-accent)] mb-1">{greeting}</div>
+            <h1 className="font-display text-[1.7rem] text-white leading-tight">{firstName}</h1>
+            <div className={`text-xs mt-0.5 ${occasion.color}`}>{occasion.label}</div>
+          </div>
+          <div className="shrink-0 flex flex-col items-center bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 rounded-2xl px-3 py-2 min-w-[52px]">
+            <Flame size={16} className="text-[var(--brand-accent)]" />
+            <span className="text-[var(--brand-accent)] font-display text-xl leading-none mt-0.5">{streak}</span>
+            <span className="text-[9px] text-white/40 uppercase tracking-wide">day{streak !== 1 ? "s" : ""}</span>
+          </div>
+        </div>
+
+        {/* Row 2: Daily scripture */}
+        <div className="bg-white/6 border border-white/10 rounded-xl p-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <BookOpen size={11} className="text-[var(--brand-accent)]" />
+            <span className="text-[9px] uppercase tracking-widest text-[var(--brand-accent)] font-semibold">Today's Scripture</span>
+          </div>
+          <p className="text-white/90 text-sm leading-relaxed italic">"{scripture.text}"</p>
+          <div className="text-[var(--brand-accent)] text-[11px] mt-2 font-semibold">— {scripture.ref}</div>
+        </div>
+
+        {/* Row 3: Daily challenge pill */}
+        <Link
+          to={challenge.to}
+          className="flex items-center gap-3 bg-[var(--brand-accent)]/12 hover:bg-[var(--brand-accent)]/22 border border-[var(--brand-accent)]/25 rounded-xl px-4 py-2.5 transition-colors group"
+        >
+          <span className="text-xl shrink-0">{challenge.emoji}</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] uppercase tracking-widest text-[var(--brand-accent)] font-bold">Today's nudge</div>
+            <div className="text-white/85 text-sm truncate">{challenge.text}</div>
+          </div>
+          <ChevronRight size={14} className="text-[var(--brand-accent)]/60 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+
+        {/* Row 4: Parish label + quick-action icon row */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-white/35 truncate max-w-[40%]">
+            {parish?.name || "My Parish"}
+            {parish?.city ? ` · ${parish.city}` : ""}
+          </div>
+          <div className="flex gap-1.5">
+            {[
+              { to: "/app/parish-feed", Icon: MessageCircle, label: "Feed" },
+              { to: "/app/prayer",      Icon: Heart,         label: "Pray" },
+              { to: "/app/events",      Icon: Calendar,      label: "Events" },
+              { to: "/app/contests",    Icon: Trophy,        label: "Contest" },
+              { to: "/app/music",       Icon: Music,         label: "Hymns" },
+            ].map(({ to, Icon, label }) => (
+              <Link
+                key={to}
+                to={to}
+                className="flex flex-col items-center gap-0.5 w-10 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                <Icon size={13} />
+                <span className="text-[8px] opacity-60">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Quick Amen Strip — instant community intercession from Home ────────────
+function QuickAmenStrip() {
+  const [prayers, setPrayers] = useState([]);
+  const [amened, setAmened] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cpm_amened_home_v1") || "{}"); }
+    catch { return {}; }
+  });
+  const [flash, setFlash] = useState({});
+
+  useEffect(() => {
+    http.get("/prayers", { params: { scope: "global" } })
+      .then((r) => setPrayers(r.data.slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
+  if (prayers.length === 0) return null;
+
+  const sendAmen = async (p) => {
+    if (amened[p.id]) return;
+    try {
+      await http.post(`/prayers/${p.id}/prayed`);
+      const next = { ...amened, [p.id]: true };
+      setAmened(next);
+      localStorage.setItem("cpm_amened_home_v1", JSON.stringify(next));
+      localStorage.setItem("cpm_prayed_v1", "1");
+      setFlash((f) => ({ ...f, [p.id]: true }));
+      setTimeout(() => setFlash((f) => ({ ...f, [p.id]: false })), 1600);
+    } catch {}
+  };
+
+  return (
+    <section data-testid="quick-amen-strip">
+      <div className="flex items-center justify-between mb-3">
+        <div className="inline-flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shrink-0" />
+          <h2 className="font-display text-xl text-[var(--brand-primary)]">Brethren Need Your Amen</h2>
+        </div>
+        <Link to="/app/prayer" className="text-sm text-[var(--brand-accent)] inline-flex items-center gap-1 shrink-0">
+          Full wall <ArrowRight size={13} />
+        </Link>
+      </div>
+      <div className="space-y-2">
+        {prayers.map((p) => {
+          const done = !!amened[p.id];
+          const showing = !!flash[p.id];
+          return (
+            <div
+              key={p.id}
+              className={`card-surface p-3.5 flex items-center gap-3 transition-all ${done ? "border-rose-100" : ""}`}
+            >
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-[var(--brand-primary)] text-white grid place-items-center text-xs font-display shrink-0">
+                {p.user_avatar
+                  ? <img src={p.user_avatar} alt="" className="w-full h-full object-cover" />
+                  : (p.user_name || "?")[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-[var(--brand-primary)] line-clamp-1">{p.title}</div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{p.user_name} · {p.prayed_count || 0} praying</div>
+              </div>
+              <button
+                onClick={() => sendAmen(p)}
+                disabled={done}
+                className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 ${
+                  showing
+                    ? "bg-rose-500 text-white scale-110"
+                    : done
+                      ? "bg-rose-50 text-rose-500 border border-rose-200"
+                      : "border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-400"
+                }`}
+              >
+                <Heart size={11} className={done ? "fill-current" : ""} />
+                {showing ? "Amen! 🙏" : done ? "Praying" : "Amen"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -657,62 +919,18 @@ function ParishDashboard({ user, memberships, prayers, events, stats }) {
   const p = active?.parish || {};
 
   return (
-    <div className="max-w-6xl mx-auto space-y-7" data-testid="home-parish-dashboard">
-      {/* Parish header card */}
-      <div
-        className="relative overflow-hidden rounded-2xl border border-[var(--border-default)]"
-        style={{ background: "linear-gradient(135deg, #0F1E38 0%, #1a3060 100%)" }}
-      >
-        <div
-          className="absolute top-0 right-0 w-56 h-56 opacity-10 pointer-events-none"
-          style={{ background: "radial-gradient(circle, #C5A028, transparent)", transform: "translate(25%,-25%)" }}
-        />
-        <div className="relative px-7 py-8 md:px-10">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="text-xs uppercase tracking-[0.22em] text-[var(--brand-accent)] mb-2">
-                Alleluia, {user?.name?.split(" ")[0] || "beloved"}
-              </div>
-              <h1 className="font-display text-2xl sm:text-3xl text-white">{p.name || "My Parish"}</h1>
-              <div className="flex flex-wrap items-center gap-2 mt-1.5 text-white/60 text-sm">
-                <MapPin size={13} />
-                <span>{p.city}{p.country ? `, ${p.country}` : ""}</span>
-                {p.shepherd_name && (
-                  <><span className="opacity-40">·</span><span>Shep. {p.shepherd_name}</span></>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full">
-              <CheckCircle size={14} className="text-[var(--brand-accent)]" />
-              <span className="text-xs text-white/80 font-medium">Active member</span>
-            </div>
-          </div>
-          {/* Quick-action pills */}
-          <div className="mt-6 flex flex-wrap gap-2">
-            {[
-              { to: "/app/parish-feed", label: "Parish Feed", icon: MessageCircle },
-              { to: "/app/prayer", label: "Prayer", icon: Heart },
-              { to: "/app/events", label: "Events", icon: Calendar },
-              { to: "/app/choir", label: "Choir", icon: Music },
-              { to: "/app/service", label: "Service", icon: HandHelping },
-              { to: "/app/my-parish", label: "Full Dashboard", icon: Sparkles },
-            ].map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
-              >
-                <Icon size={12} /> {label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
+    <div className="max-w-6xl mx-auto space-y-6" data-testid="home-parish-dashboard">
 
-      {/* CPM Stars of the Week/Month */}
+      {/* ① Daily Moment — fresh every single day */}
+      <DailyMomentCard user={user} parish={p} />
+
+      {/* ② CPM Stars — celebration & recognition */}
       <CpmStarsWidget />
 
-      {/* 🔴 Live Parish Feed — most engaging, shown first */}
+      {/* ③ Quick Amen — intercede for brethren without leaving home */}
+      <QuickAmenStrip />
+
+      {/* ④ Live Parish Feed — what's happening right now */}
       <LiveParishFeedPreview parishId={active?.parish_id} />
 
       {/* Active Contests */}
