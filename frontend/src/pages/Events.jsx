@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { http, formatErr } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import {
   Calendar, Video, MapPin, Loader2, ExternalLink, Plus, Trash2,
   Radio, ChevronDown, ChevronUp, Clock, Globe, Church,
-  Star, CheckCircle, Sparkles, X, Image, Play,
+  Star, CheckCircle, Sparkles, X, Image, Play, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -269,6 +269,16 @@ function EventCard({ event: ev, currentUser, memberships, providers, onDeleted }
         </div>
       )}
 
+      {/* Event poster banner */}
+      {ev.poster_url && (
+        <div className="relative overflow-hidden" style={{ maxHeight: 200 }}>
+          <img src={ev.poster_url} alt={ev.title} className="w-full object-cover" style={{ maxHeight: 200 }} />
+          {status === "live" && (
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+          )}
+        </div>
+      )}
+
       <div className="p-5">
         <div className="flex items-start gap-4">
           {/* Date block */}
@@ -370,10 +380,26 @@ function NewEventForm({ cats, memberships, onCreated, onClose }) {
   const [form, setForm] = useState({
     title: "", description: "", category: cats[0]?.label || "Sunday Worship",
     starts_at: "", ends_at: "", scope: "global", parish_id: memberships[0]?.parish_id || "",
-    location: "", livestream_url: "",
+    location: "", livestream_url: "", poster_url: "",
   });
   const [busy, setBusy] = useState(false);
+  const [posterBusy, setPosterBusy] = useState(false);
+  const posterRef = useRef(null);
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const uploadPoster = async (file) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return toast.error("Poster image must be under 10 MB");
+    if (!file.type.startsWith("image/")) return toast.error("Please select an image file");
+    setPosterBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await http.post("/posts/media", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setForm((p) => ({ ...p, poster_url: data.url }));
+      toast.success("Poster uploaded");
+    } catch (e) { toast.error(formatErr(e)); } finally { setPosterBusy(false); }
+  };
 
   const submit = async () => {
     if (!form.title.trim() || !form.starts_at) return toast.error("Title and start time are required");
@@ -418,9 +444,45 @@ function NewEventForm({ cats, memberships, onCreated, onClose }) {
         <input className="input-clean sm:col-span-2" placeholder="Location or address (optional)" value={form.location} onChange={f("location")} />
         <input className="input-clean sm:col-span-2" placeholder="Primary livestream URL (optional — more can be added after)" value={form.livestream_url} onChange={f("livestream_url")} />
         <textarea className="input-clean sm:col-span-2 min-h-[80px] resize-none" placeholder="Event description" value={form.description} onChange={f("description")} />
+
+        {/* Event poster upload */}
+        <div className="sm:col-span-2">
+          <label className="text-xs text-[var(--text-tertiary)] block mb-1.5">Event poster / banner (optional)</label>
+          {form.poster_url ? (
+            <div className="relative rounded-xl overflow-hidden border border-[var(--border-default)] bg-[var(--bg-subtle)]">
+              <img src={form.poster_url} alt="Event poster" className="w-full max-h-48 object-cover" />
+              <button
+                onClick={() => setForm((p) => ({ ...p, poster_url: "" }))}
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white grid place-items-center hover:bg-black/80"
+                type="button"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => posterRef.current?.click()}
+              disabled={posterBusy}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-xl border-2 border-dashed border-[var(--border-default)] text-sm text-[var(--text-tertiary)] hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)] transition-colors"
+            >
+              {posterBusy
+                ? <><Loader2 size={15} className="animate-spin" /> Uploading…</>
+                : <><Upload size={15} /> <Image size={15} /> Upload event poster</>}
+            </button>
+          )}
+          <input
+            ref={posterRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => uploadPoster(e.target.files?.[0])}
+          />
+        </div>
+
         <div className="sm:col-span-2 flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm border border-[var(--border-default)] rounded-md">Cancel</button>
-          <button onClick={submit} disabled={busy} className="btn-primary inline-flex items-center gap-2" data-testid="event-submit">
+          <button onClick={submit} disabled={busy || posterBusy} className="btn-primary inline-flex items-center gap-2" data-testid="event-submit">
             {busy ? <Loader2 size={15} className="animate-spin" /> : <Calendar size={15} />} Create event
           </button>
         </div>

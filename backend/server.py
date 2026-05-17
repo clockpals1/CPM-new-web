@@ -225,6 +225,7 @@ class EventIn(BaseModel):
     parish_id: Optional[str] = None
     livestream_url: Optional[str] = ""
     location: Optional[str] = ""
+    poster_url: Optional[str] = None   # uploaded event poster / banner image
 
 
 class JobIn(BaseModel):
